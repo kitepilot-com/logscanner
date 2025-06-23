@@ -1,0 +1,2 @@
+SASL LOGIN authentication failed: authentication failure, sasl_username=((?!root@))
+SASL LOGIN authentication failed: authentication failure, sasl_username=root@

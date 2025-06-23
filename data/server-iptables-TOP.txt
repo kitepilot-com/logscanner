@@ -1,0 +1,36 @@
+# https://stuffphilwrites-com.translate.goog/fw-ids-iptables-flowchart-v2024-05-22/?_x_tr_sl=en&_x_tr_tl=es&_x_tr_hl=es&_x_tr_pto=tc
+#########  *mangle  ########
+## mangle marks packets for routing over VPN
+#*mangle
+#:PREROUTING  ACCEPT [0:0]
+#:INPUT       ACCEPT [0:0]
+#:FORWARD     ACCEPT [0:0]
+#:OUTPUT      ACCEPT [0:0]
+#:POSTROUTING ACCEPT [0:0]
+#
+### From:
+### https://unix.stackexchange.com/questions/479872/routing-traffic-via-different-interface-based-on-destination
+## These are the addresses to route to "local to US" boxes
+#-A PREROUTING -s 10.8.1.102/32 ! -d 10.8.1.0/24 -j LOG --log-prefix "mark P ==> "
+#-A PREROUTING -s 10.8.1.102/32 ! -d 10.8.1.0/24 -j MARK --set-mark 0x1
+#-A PREROUTING -j RETURN
+#
+#-A FORWARD -s 10.8.1.102/32 ! -d 10.8.1.0/24 -j LOG --log-prefix "mark F ==> "
+#-A FORWARD -s 10.8.1.102/32 ! -d 10.8.1.0/24 -j MARK --set-mark 0x1
+#-A FORWARD -j RETURN
+###########################
+#COMMIT
+#########  *mangle  ########
+
+
+
+*filter
+:INPUT DROP [0:0]
+:FORWARD ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+
+-A INPUT -i lo   -j ACCEPT
+-A INPUT -i eth1 -j ACCEPT
+-A INPUT -i eth2 -j ACCEPT
+-A INPUT -i eth3 -j ACCEPT
+
