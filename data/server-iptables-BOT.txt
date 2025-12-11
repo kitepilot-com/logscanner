@@ -1,0 +1,66 @@
+
+-A INPUT -p icmp -j ACCEPT
+
+-A INPUT -i eth0 -p all -d 10.0.0.0/8       -j DROP
+-A INPUT -i eth0 -p all -d 127.0.0.0/8      -j DROP
+-A INPUT -i eth0 -p all -d 169.254.0.0/16   -j DROP
+-A INPUT -i eth0 -p all -d 172.16.0.0/12    -j DROP
+-A INPUT -i eth0 -p all -d 192.168.0.0/16   -j DROP
+
+-A INPUT -i tun0 -p all -d 127.0.0.0/8      -j DROP
+-A INPUT -i tun0 -p all -d 169.254.0.0/16   -j DROP
+-A INPUT -i tun0 -p all -d 172.16.0.0/12    -j DROP
+-A INPUT -i tun0 -p all -d 192.168.0.0/16   -j DROP
+
+-A INPUT -i eth0 -p tcp -m tcp ! --tcp-flags SYN,RST,ACK SYN -m state --state NEW -j DROP
+-A INPUT -i eth0 -p tcp -m state --state INVALID                                  -j DROP
+
+-A INPUT -i tun0 -p tcp -m tcp ! --tcp-flags SYN,RST,ACK SYN -m state --state NEW -j DROP
+-A INPUT -i tun0 -p tcp -m state --state INVALID                                  -j DROP
+
+-A INPUT                -m state --state RELATED,ESTABLISHED                      -j ACCEPT
+
+# Starting Nmap 7.80 ( https://nmap.org ) at 2024-12-21 16:11 MST
+# Host is up (0.072s latency).
+# Not shown: 990 closed ports
+# PORT    STATE    SERVICE
+# 22/tcp  open     ssh
+# 25/tcp  filtered smtp
+# 53/tcp  open     domain
+# 80/tcp  open     http
+# 143/tcp open     imap
+# 443/tcp open     https
+# 465/tcp open     smtps
+# 587/tcp open     submission
+# 646/tcp filtered ldp
+# 993/tcp open     imaps
+-A INPUT -p tcp -m tcp -m multiport --dports ssh,smtp,domain,http,imap,https,smtps,submission,imaps,3128 -j ACCEPT
+-A INPUT -p udp -m udp -m multiport --dports          domain,1194                                        -j ACCEPT
+
+# Inbound
+-A FORWARD -p icmp -j ACCEPT
+
+#-A FORWARD -i eth0 -p tcp -m tcp ! --tcp-flags SYN,RST,ACK SYN -m state --state NEW -j DROP
+#-A FORWARD -i eth0 -p tcp -m state --state INVALID                                  -j DROP
+#
+#-A FORWARD -i tun0 -p tcp -m tcp ! --tcp-flags SYN,RST,ACK SYN -m state --state NEW -j DROP
+#-A FORWARD -i tun0 -p tcp -m state --state INVALID                                  -j DROP
+#
+## inbound OK
+#-A FORWARD -i eth0 -m state --state RELATED,ESTABLISHED    -j ACCEPT
+#-A FORWARD -i tun0 -m state --state RELATED,ESTABLISHED    -j ACCEPT
+
+COMMIT
+
+# This chain is needed if we want the packets to go to the street from the server.
+# Right now we mark to send the them to another box in the VPN.
+#*nat
+#:PREROUTING ACCEPT [0:0]
+#:INPUT ACCEPT [0:0]
+#:OUTPUT ACCEPT [0:0]
+#:POSTROUTING ACCEPT [0:0]
+#
+#-A POSTROUTING -s 10.8.1.0/24 -m mark -j LOG --log-prefix "MASQUERADE ==> "
+#-A POSTROUTING -s 10.8.1.0/24 -o eth0 -j MASQUERADE
+#
+#COMMIT

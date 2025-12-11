@@ -1,0 +1,1 @@
+while true;do SCREEN="$(top -b -n1|head|grep '^[[:space:]]*PID';top -b -n1|grep '[[:space:]]logscan'; for CTRL in $(ls -d ~/logscanner/run/sql*/*);do echo -e "$CTRL\t$(find $CTRL -type f|wc -l)"; done)"; clear; echo "${SCREEN}"; sleep 1; done

@@ -1,0 +1,14 @@
+################################################################################
+#         FILE: logscanner/data/whitelist.txt                                  #
+#         This file contains the first any-digits of white-listed IPs.         #
+################################################################################
+
+127.	localhost.
+189.222.	Aztecawind Mexico.
+186.188.65.119	lmontilla-desktop
+187.250.118.76	parapentes
+71.229.144.247	Adriana-Denver
+4.1.124.72	airtimeabove
+190.218.30.120	voyair
+216.147.124.0	jack
+#*END*#

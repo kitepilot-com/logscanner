@@ -1,0 +1,51 @@
+signals:
+Catching up
+Idle => Waiting in inotify and/or getline.
+Restarting
+
+Starting up:
+	// Case 1: The program has a fresh start on an empty logfile -> Control files SHOULD NOT exist.
+	//      => Thread 1 starts reading from begining of file.
+	//      => Thread 2 doesn't start.
+
+	// Case 2: The program has a fresh start on a non empty logfile -> Control files SHOULD NOT exist.
+	//      => "nextLogline2Read.ctrl" is created containing EOF.
+	//      => "fileOrSegmentEOF.ctrl" IS created containing EOF.
+	//      => "nextCatchup2Read.ctrl" is created containing 0.
+	//      => Thread 1 starts reading from EOF.
+	//      => Thread 2 starts reading from begining of file to "fileOrSegmentEOF.ctrl".
+	//      => hasBacklog => TRUE;
+
+	// Case 3: The program starts after it has been interrupted -> nextLogline2Read.ctrl DOES exist.
+	//   Case 3.1: Case 1 has been interrupted -> "nextCatchup2Read.ctrl" and "fileOrSegmentEOF.ctrl" DO NOT exist.
+	//     Case 3.1,1: EOF == "nextLogline2Read.ctrl" -> NO NEW LINES have been appended.
+	//          => Thread 1 starts reading from EOF.
+	//          => Thread 2 doesn't start.
+
+	//     Case 3.1,2: EOF > "nextLogline2Read.ctrl" ->  NEW LINES HAVE been appended.
+	//          => "fileOrSegmentEOF.ctrl" IS created containing EOF.
+	//          => "nextLogline2Read.ctrl" is renamed to "nextCatchup2Read.ctrl".
+	//          => Thread 1 starts reading from EOF.
+	//          => Thread 2 starts reading from "nextCatchup2Read.ctrl" up to "fileOrSegmentEOF.ctrl".
+	//          => hasBacklog => TRUE;
+
+	//   Case 3.2: Case 2 has been interrupted -> "nextCatchup2Read.ctrl" and "fileOrSegmentEOF.ctrl" exist.
+	//     Case 3.2,1: EOF == "nextLogline2Read.ctrl" -> NO NEW LINES have been appended.
+	//          => Thread 1 starts reading from EOF.
+	//          => Thread 2 starts reading from "nextCatchup2Read.ctrl" up to "fileOrSegmentEOF.ctrl".
+
+	//     Case 3.2,2: EOF > "fileOrSegmentEOF.ctrl" ->  NEW LINES HAVE been appended.
+	//          => A TIMESTAMP is created.
+	//          => The file "nextLogline2Read.ctrl" is renamed to "{TIMESTAMP}-nextCatchup2Read.ctrl".
+	//          => The current EOF                  is written to "{TIMESTAMP}-fileOrSegmentEOF.ctrl".
+	//          => Thread 1 starts reading from EOF.
+	//          => Thread 2 starts reading from "nextCatchup2Read.ctrl" up to "fileOrSegmentEOF.ctrl".
+	//          => hasBacklog => TRUE;
+
+	// Case 3.2,2: Special handling:
+	// -----------------------------
+	//    NOTE: this process is gddressed in getCatchupLine().
+	//      => For each TIMESTAMP group:
+	//        => Remove "{TIMESTAMP}-" from file names (rename).
+	//        => Thread 2 starts reading from "nextCatchup2Read.ctrl" up to "fileOrSegmentEOF.ctrl".
+
