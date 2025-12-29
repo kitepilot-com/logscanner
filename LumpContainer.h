@@ -32,31 +32,41 @@ class LumpContainer : public ConfContainer
 		virtual bool initReadLogThread();
 		virtual void stopReadLogThread();
 	protected:
-		void    monitorComponentsForRename(std::string lumpComponent, std::string &ctrlFilePath);
 		void    feedLumpLogFile(std::string lumpComponent, std::atomic<std::size_t> &filesSeenCnt);
 		void    writeLineToLumpFile(std::string line, std::filesystem::path logFilePath);
-		void    inotifyLumpfile(std::filesystem::path logFilePath);
+//		void    inotifyLumpfile(std::filesystem::path logFilePath);
+
+		virtual void  StartWaitForFirstLineThread(std::string logFilePath, std::filesystem::path ctrlFileName);
+		virtual void  removeAllControlFiles(std::string logFilePath);
 	private:
-		// Result of initReadLogThread...
-//		std::atomic<std::size_t>   m_resultCnt;
+
+		// Members below are used to control the result of initReadLogThread...
+		// initReadLogThread starts a feedLumpLogFile for every compnent of the LUMP object,
+		// initReadLogThread returns true when all the components have been propperly opened.
+		// After all feedLumpLogFile have been started a loop 'while(filesSeenCnt.load() < m_logList.size())'
+		// uses m_condVar to wait for all the results.
 		std::atomic<bool>          m_resultFlag;
 		boost::condition_variable  m_condVar;
 
 		// This vector holds the pointers to the feedLumpLogFile threads created by initReadLogThread.
 		// They ar joined at stopReadLogThread()
-		std::vector<std::shared_ptr<boost::thread>> m_allThreads;
+		std::vector<std::shared_ptr<boost::thread>> m_allFeedLumpLogFileThreads;
 
 		// std::set to store lump components names.
 		// The iterator is used to return one name at a time in getLumpComponent.
+		// This list also used to trigger the exit of all files from INotifyObj::intfThread
+		// if any component or the LUMP file itself is renamed bt logrotate.
 		std::set<std::string>            m_logList;
 		std::set<std::string>::iterator  m_logListIter;
 
-		// This member stores the thread ID we need to kill this thread as part of a restart.
-		std::map<std::string, boost::thread::native_handle_type>   m_logReadingThreadIdList;
-		mutable boost::mutex                                       m_logReadingThreadIdListMutex;
-//		std::atomic<bool>                                          m_killAllThreads;
+		// Save list of watched files so we can release them in bulk.
+		std::vector<std::shared_ptr<boost::thread>> m_allMonitorThreads;
 
-		// This mutex control writes to the LUMP file.
+		// This member stores the thread ID we need to kill this thread as part of a restart.
+//		std::map<std::string, boost::thread::native_handle_type>   m_logReadingThreadIdList;
+		mutable boost::mutex                                       m_logReadingThreadIdListMutex;
+
+		// This mutex is used to manage writes to the LUMP file in writeLineToLumpFile.
 		mutable boost::mutex       m_writeMutex;
 };
 

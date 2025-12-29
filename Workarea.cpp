@@ -35,7 +35,7 @@ void Workarea::saveIPaddreess(std::array<std::string, 4> &ipAddr, bool whitelist
 {
 	// We will only hit this function in parallel when 2 regexps match the same line.
 	// That sould not happen, fix the regexp, the line will be flagged in "lines seen".
-	boost::mutex::scoped_lock lock(m_regexpSyncMtx);
+	m_regexpSyncMtx.lock();
 
 	m_ipAddr[0] = ipAddr[0];
 	m_ipAddr[1] = ipAddr[1];
@@ -44,6 +44,8 @@ void Workarea::saveIPaddreess(std::array<std::string, 4> &ipAddr, bool whitelist
 	m_matchCount++;
 
 	m_whitelisted = whitelisted;
+
+	m_regexpSyncMtx.unlock();
 }
 
 void Workarea::getIPaddrOctects(std::array<std::string, 4> &ipAddr)

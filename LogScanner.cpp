@@ -16,12 +16,14 @@
 #include <sstream>
 #include <string>
 #include <iostream>
+#include <filesystem>
 #include <boost/regex.hpp>
 #include <boost/thread.hpp>
 
 #include "LogManager.h"
 #include "LogScanner.h"
 #include "LumpContainer.h"
+#include "INotifyObj.h"
 #include "ConveyorBelt.h"
 
 std::atomic<bool>  LogScanner::KEEP_LOOPING(false);
@@ -36,7 +38,7 @@ LogScanner::LogScanner() :
 	m_notifyEval(NotifyIPC()),
 	m_notifyDrop(NotifyIPC())
 {
-int JUNK_ADD_PARENTS_AND_LEVELS_TO_REPORTS; //FIXTHIS!!!
+int JUNK_GET_INIT_OUT_OF_CONSTRUCTORS_0; int JUNK_GET_INIT_OUT_OF_CONSTRUCTORS_1; int JUNK_GET_INIT_OUT_OF_CONSTRUCTORS_2; int JUNK_GET_INIT_OUT_OF_CONSTRUCTORS_3; //FIXTHIS!!!
 	LogManager::init();
 
 	LogManager::getInstance()->consoleMsg("*********************************************");
@@ -87,14 +89,17 @@ int LogScanner::exec()
 
 		LogManager::getInstance()->consoleMsg("==> LogScanner says: Hello World...");
 
-		// ARCHITECTURE
-		// ============
-		// The main program spawns 3 main threads at startup:
-		// The Input Thread, the Evaluation Thread and the Drop Thread.
+		// Initialize INotifyObj`
+		// We need to create this here before we ever try to use it because
+		// this is a monostate class and it has to be initialized.
+int JUNK_FIX_NAMING_AND_STRUCTURE_OF_DIRECTORIES; //FIXTHIS!!!
+		INotifyObj iNotifyObj("run/ctrl/intfThreadExit.flag");
+
 		std::shared_ptr<boost::thread> comm(std::make_shared<boost::thread>(&LogScanner::commThread, this));
-		std::shared_ptr<boost::thread> wsql(std::make_shared<boost::thread>(&LogScanner::SQL_Thread, this));
+		std::shared_ptr<boost::thread> sqlt(std::make_shared<boost::thread>(&LogScanner::SQL_Thread, this));
 		std::shared_ptr<boost::thread> drop(std::make_shared<boost::thread>(&LogScanner::dropThread, this));
 		std::shared_ptr<boost::thread> eval(std::make_shared<boost::thread>(&LogScanner::evalThread, this));
+		std::shared_ptr<boost::thread> intf(std::make_shared<boost::thread>(&LogScanner::intfThread, this));
 		std::shared_ptr<boost::thread> inpt(std::make_shared<boost::thread>(&LogScanner::inptThread, this));
 
 		loadDroppedIPs();
@@ -104,7 +109,11 @@ int LogScanner::exec()
 		// and kill everyone else upon exit...
 		inpt->join();
 
-		LogManager::getInstance()->consoleMsg("LogScanner::inptThread DONE, sending notifyNew to everybody...");
+		// Wait for inotify.
+		intf->join();
+
+		// Release the NotifyIPC that are locked.
+		LogManager::getInstance()->consoleMsg("LogScanner::inptThread sending sending notifyNew to everybody...");
 		m_notifyEval.notifyNew();
 		m_notifyDrop.notifyNew();
 
@@ -117,7 +126,7 @@ int LogScanner::exec()
 		LogManager::getInstance()->consoleMsg("ALL notifyNew sent!");
 		eval->join();
 		drop->join();
-		wsql->join();
+		sqlt->join();
 int JUNK_SEND_A_MSG_TO_SOCKET_INSTEAD_OF_KILL; //FIXTHIS!!!
 		LogManager::getInstance()->consoleMsg("Killing LogScanner::commThread...");
 		boost::thread::native_handle_type commThreadID = comm->native_handle();
@@ -208,13 +217,14 @@ void LogScanner::uploadConfiguration(std::filesystem::path confPath)
 				loadAndParseConfFiles(sortedTree, emptyDirs);
 				LogManager::getInstance()->consoleMsg(("Found " + std::to_string(m_confCount) + " configration files").c_str());
 
-				// std::vector<ConfContainer *>   m_logfileList;
+				// std::vector<ConfContainer *>   m_ConfContainerList;
 				// This loop validates and outputs to stdout the final configuration.
+int JUNK_RESTORE_SUMMARY_MESSAGE; //FIXTHIS!!!   There will be more opcodes...    Make something decent!
 //				LogManager::getInstance()->consoleMsg();
 //				LogManager::getInstance()->consoleMsg("**********************************************************");
 //				LogManager::getInstance()->consoleMsg("vvvv => BEGIN CONFIGURATION VALIDATION AND SUMMARY <= vvvv");
 //				LogManager::getInstance()->consoleMsg("**********************************************************");
-				for(auto logfileData : m_logfileList)
+				for(auto logfileData : m_ConfContainerList)
 				{
 					LogManager::getInstance()->consoleMsg();
 					LogManager::getInstance()->consoleMsg(("==> Begin " + logfileData->getLogFilePath().string()).c_str());
@@ -657,7 +667,15 @@ void LogScanner::parseConfOf(std::filesystem::path confPath)
 
 						if(logfileData->getObjStatus() == ConfContainer::HEALTHY)
 						{
-							m_logfileList.push_back(logfileData);
+							m_ConfContainerList.push_back(logfileData);
+#pragma message("//FIXTHIS!!! SHOW m_inotifyTargetPaths AT STARTUP")
+							std::filesystem::path  fullFilePath(logfileData->getLogFilePath());
+							std::string            patths4inotify(fullFilePath.parent_path());
+							if(m_inotifyTargetPaths.find(patths4inotify) == m_inotifyTargetPaths.end())
+							{
+								m_inotifyTargetPaths.insert(patths4inotify);
+							}
+
 							m_confCount++;
 						}
 						else
@@ -955,6 +973,12 @@ KEEP_LOOPING.store(false);       //FIXTHIS!!!
 	LogManager::getInstance()->consoleMsg(">> EXITING commThread => Bye bye cruel World");
 }
 
+void LogScanner::intfThread()
+{
+	INotifyObj iNotifyObj;
+	iNotifyObj.intfThread(boost::ref(m_inotifyTargetPaths));
+}
+
 void LogScanner::SQL_Thread()
 {
 	// This thread creates a thread for every SQL table.
@@ -971,8 +995,7 @@ void LogScanner::SQL_Thread()
 		std::string tableName(notifyIPC.first);
 
 		// Start a "execSqlInsert Thread" for every SQL table.
-		std::shared_ptr<boost::thread> thread(std::make_shared<boost::thread>(&LogScanner::execSqlInsert, this, tableName, notifyIPC.second.get()));
-		allThreads.push_back(thread);
+		allThreads.push_back(std::make_shared<boost::thread>(&LogScanner::execSqlInsert, this, tableName, notifyIPC.second.get()));
 	}
 
 	for(auto thread : allThreads)
@@ -992,7 +1015,7 @@ void LogScanner::inptThread()
 
 	std::vector<std::shared_ptr<boost::thread>> allThreads;
 
-	for(auto logfileData : m_logfileList)
+	for(auto logfileData : m_ConfContainerList)
 	{
 		// Start a "Reading Thread" for every logfile.
 		std::shared_ptr<boost::thread> thread(std::make_shared<boost::thread>(&LogScanner::logReadingThread, this, logfileData.get()));
@@ -1383,31 +1406,30 @@ void LogScanner::logReadingThread(ConfContainer *logfileData)
 		while(KEEP_LOOPING.load() && !logfileData->RESTART_THREAD.load())
 		{
 			// Open the log file for reading and set the input stream pointer for reading after EOF.
+			// initReadLogThread ma sit foe a whilew, so check KEEP_LOOPING and RESTART_THREAD too...
 			if(logfileData->initReadLogThread())
 			{
-				// The ConveyorBelt moves lines from this thread to LogScanner::processingThread
-				ConveyorBelt conveyorBelt(m_BASE_SEMAPHORE_NAME + "logReadingThread" + logfileData->getThreadName(), m_totThreads);
-
 				LogManager::getInstance()->consoleMsg(("File (logReadingThread) good\t=>\t" + logfileData->getLogFilePath().string()).c_str());
 
+				// The ConveyorBelt moves lines from this thread to LogScanner::processingThread
 				std::vector<std::shared_ptr<boost::thread>> allThreads;
+				ConveyorBelt                                conveyorBelt(m_BASE_SEMAPHORE_NAME + "logReadingThread" + logfileData->getThreadName(), m_totThreads);
 
-				// Monitor the file for rename (logrotate will do that).
-				std::shared_ptr<boost::thread> thread(std::make_shared<boost::thread>(boost::thread(&LogScanner::monitorLogForRename, this, logfileData)));
-				allThreads.push_back(thread);
+				// Monitor the file for rename (logrotate will rename the file...).
+				allThreads.push_back(std::make_shared<boost::thread>(&LogScanner::monitor4RenameThread, this, logfileData));
+
+				// Backlog?
+				if(logfileData->fileHasBackLog())
+				{
+					std::shared_ptr<boost::thread> thread(std::make_shared<boost::thread>(boost::thread(&LogScanner::catchUpLogThread, this, logfileData)));
+					allThreads.push_back(thread);
+				}
 
 				// Start m_totThreads "processing threads".
 				// We store the pointers in a vector to "join" them on exit.
 				for(int procThreadID = 0; procThreadID < m_totThreads; procThreadID++)
 				{
 					std::shared_ptr<boost::thread> thread(std::make_shared<boost::thread>(&LogScanner::processingThread, this, logfileData, "logReadingThread", &conveyorBelt, procThreadID, &ConfContainer::writePosOfNextLogline2Read));
-					allThreads.push_back(thread);
-				}
-
-				// Backlog?
-				if(logfileData->fileHasBackLog())
-				{
-					std::shared_ptr<boost::thread> thread(std::make_shared<boost::thread>(boost::thread(&LogScanner::catchUpLogThread, this, logfileData)));
 					allThreads.push_back(thread);
 				}
 
@@ -1442,7 +1464,8 @@ LogManager::getInstance()->logEvent(("DBG_TIME_EOF_logReadingThread_GOT_from" + 
 						// And we can't control the process that adds the lines...
 						// Ah well...
 						// The line will sit there until another line is added...
-						logfileData->inotifyLogfile(logfileData->getLogFilePath());
+//						logfileData->inotifyLogfile(logfileData->getLogFilePath());
+						monitorNewLineThread(logfileData);
 					}
 				}
 LogManager::getInstance()->consoleMsg(("DBG_OUT OF LOOP logReadingThread" + logfileData->getThreadName() + " <=>\tKEEP_LOOPING = " + (KEEP_LOOPING.load() ? "T" : "F") + "\t<=> RESTART_THREAD = " + (logfileData->RESTART_THREAD.load() ? "T" : "F") + "\t" + line).c_str());  //FIXTHIS!!!
@@ -1792,9 +1815,6 @@ std::string LogScanner::createTimestamp()
 	// It's highly unlikely but we can get a duplicated timestamp.
 	char  timestamp[LogManager::TIMESTAMP_SIZE + 1];
 	LogManager::getInstance()->nanosecTimestamp(timestamp);
-//	boost::mutex::scoped_lock lock(m_mutex4Timestamp);
-////FIXTHIS!!!   This function seems to be duplicated, see LogManager..?.
-//	static const int TIMESTAMP_SIZE = 19;
 //	std::string timestamp(std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count()));
 ////	std::string timestamp(std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count()));
 
@@ -1812,38 +1832,7 @@ bool LogScanner::hasIPaddress(std::string &line)
 //LogManager::getInstance()->consoleMsg((std::string("DBG_hasIPaddress => ") + (boost::regex_search(line, result, addr) ? "T => " + result[1] : "F") + " <=> " + line).c_str());  //FIXTHIS!!!
 	return boost::regex_search(line, result, addr);
 }
-/*
-bool LogScanner::notEverSeen(std::string line)//FIXTHIS!!!
-{
-	std::unique_ptr<sql::Connection> conn(connectToDB());
-	bool                             seen = true;
 
-	std::string sql2go = "SELECT Logline FROM T100_LinesSeen WHERE Logline = ?;";
-
-	try
-	{
-		std::unique_ptr<sql::PreparedStatement> stmnt(conn->prepareStatement(sql2go.data()));
-		stmnt->setString(1, line);
-		std::unique_ptr<sql::ResultSet>         resulSelect(stmnt->executeQuery());
-//LogManager::getInstance()->logEvent("DBG_notEverSeen", line);
-		if(resulSelect != nullptr && resulSelect->rowsCount() > 0)
-		{
-//LogManager::getInstance()->logEvent("DBG_notEverSeen_SEEN", line);
-			seen = false;
-		}
-	}
-	catch(sql::SQLException &e)//FIXTHIS!!!  The whole try thing...
-	{
-		std::string errmsg('\t' + std::string(e.what()) + '\t' + sql2go);
-		LogManager::getInstance()->logEvent("notEverSeen_CATCH", errmsg.c_str());
-//		LogManager::getInstance()->consoleMsg(("notEverSeen_CATCH *DEAD*\t" + errmsg).c_str());
-	}
-
-	conn->close();
-
-	return seen;
-}
-*/
 bool LogScanner::checkForWhitelist(const std::string &IPaddr)
 {
 	std::map<std::string, std::string>::iterator ipInfo = m_whitelist.begin();
@@ -1865,9 +1854,14 @@ bool LogScanner::checkForWhitelist(const std::string &IPaddr)
 	return isWhitelisted;
 }
 
-void LogScanner::monitorLogForRename(ConfContainer *logfileData)
+void LogScanner::monitorNewLineThread(ConfContainer *logfileData)
 {
-	logfileData->monitorLogForRename(logfileData->getCtrlBaseName() + "/fstline.txt");
+	logfileData->monitorNewLineThread(logfileData->getLogFilePath().string());
+}
+
+void LogScanner::monitor4RenameThread(ConfContainer *logfileData)
+{
+	logfileData->monitor4RenameThread(logfileData->getLogFilePath().string());
 }
 
 void LogScanner::insertIntoSeenTable(ConfContainer *logfileData, std::string &line, bool regexMatch)
@@ -1908,34 +1902,7 @@ void LogScanner::insertIntoSeenTable(ConfContainer *logfileData, std::string &li
 	// Notify LogScanner::execSqlInsert thread for this table.
 //LogManager::getInstance()->consoleMsg(("DBG_NOTIFYING insert into table (insertIntoSeenTable)!!!\t" + tableName + '\t' + sql2go).c_str());  //FIXTHIS!!!
 	notifyIPC->second->notifyNew();
-}/*
-{
-	// mysql is deadlocking here, so...
-	boost::mutex::scoped_lock lock(m_mutex4sql);
-
-	// Same line can come from more than 1 log, so ignore duplicates.
-	std::string sql2go("INSERT IGNORE INTO T100_LinesSeen VALUES (" +
-	    m_QUOTE + createTimestamp() + m_QUOTE + ", ?, ?, ?);");
-
-	std::unique_ptr<sql::Connection> conn(connectToDB());
-
-	try
-	{
-		std::unique_ptr<sql::PreparedStatement> stmnt(conn->prepareStatement(sql2go.data()));
-		stmnt->setString(1, logfileData->getLogFilePath().string());
-		stmnt->setString(2, line);
-		stmnt->setBoolean(3, regexMatch);
-		stmnt->execute();
-	}
-	catch(sql::SQLException &e)
-	{
-		std::string errMsg("\nWhat:" + std::string(e.what()) + '\t' + logfileData->getLogFilePath().string() + "\nsql2go:" + sql2go + '\t' + line);
-		LogManager::getInstance()->logEvent("insertIntoSeenTable_CATCH", errMsg.c_str());
-		LogManager::getInstance()->consoleMsg((std::string("*DEAD*\t") + errMsg).c_str());
-	}
-
-	conn->close();
-}*/
+}
 
 void LogScanner::insertIntoAudtTable(ConfContainer *logfileData, Workarea *threadWkArea, std::string *linePtr, int rgxpThreadID)
 {
@@ -1984,43 +1951,7 @@ void LogScanner::insertIntoAudtTable(ConfContainer *logfileData, Workarea *threa
 	// Notify LogScanner::execSqlInsert thread for this table.
 //LogManager::getInstance()->consoleMsg(("DBG_NOTIFYING insert into table (insertIntoAudtTable)!!!\t" + tableName + '\t' + sql2go).c_str());  //FIXTHIS!!!
 	notifyIPC->second->notifyNew();
-}/*
-{
-	// mysql is dead-locking here, so...
-//	boost::mutex::scoped_lock lock(m_mutex4sql);
-
-	std::array<std::string, 4> ipAddr;
-	threadWkArea->getIPaddrOctects(boost::ref(ipAddr));
-
-	std::string sql2go("INSERT INTO T020_Audit VALUES ("                                  +
-	    m_QUOTE + lineTimestamp2Seconds(logfileData, line)     + m_QUOTE + ", " +
-	    m_QUOTE + ipAddr[0]                                    + m_QUOTE + ", " +
-	    m_QUOTE + ipAddr[1]                                    + m_QUOTE + ", " +
-	    m_QUOTE + ipAddr[2]                                    + m_QUOTE + ", " +
-	    m_QUOTE + ipAddr[3]                                    + m_QUOTE + ", ?, ?, ?, " +
-	    m_QUOTE + logfileData->getRegexpSvrt(rgxpThreadID)     + m_QUOTE + ", " +
-	              (threadWkArea->getMatchCount() > 1 ? "true" : "false") + ", " +
-	              (threadWkArea->isWhitelisted() ? "true" : "false")     + ");");
-
-	std::unique_ptr<sql::Connection> conn(connectToDB());
-
-	try
-	{
-		std::unique_ptr<sql::PreparedStatement> stmnt(conn->prepareStatement(sql2go.data()));
-		stmnt->setString(1, logfileData->getLogFilePath().string());
-		stmnt->setString(2, line);
-		stmnt->setString(3, logfileData->getRegexpText(rgxpThreadID));
-		stmnt->execute();
-	}
-	catch(sql::SQLException &e)
-	{
-		std::string errMsg('\t' + std::string(e.what()) + '\t' + sql2go + '\t' + line);
-		LogManager::getInstance()->logEvent("insertIntoAudtTable_CATCH", errMsg.c_str());
-		LogManager::getInstance()->consoleMsg((std::string("*DEAD*\t") +  errMsg).c_str());
-	}
-
-	conn->close();
-}*/
+}
 
 void LogScanner::insertIntoEvalTable(ConfContainer *logfileData, Workarea *threadWkArea, std::string *linePtr, int rgxpThreadID)
 {
@@ -2068,44 +1999,7 @@ void LogScanner::insertIntoEvalTable(ConfContainer *logfileData, Workarea *threa
 	// Notify LogScanner::execSqlInsert thread for this table.
 //LogManager::getInstance()->consoleMsg(("DBG_NOTIFYING insert into table (insertIntoEvalTable)!!!\t" + tableName + '\t' + sql2go).c_str());  //FIXTHIS!!!
 	notifyIPC->second->notifyNew();
-}/*
-{
-	// mysql is dead-locking here, so...
-//	boost::mutex::scoped_lock lock(m_mutex4sql);
-
-	std::unique_ptr<sql::Connection> conn(connectToDB());
-
-	std::array<std::string, 4> ipAddr;
-	threadWkArea->getIPaddrOctects(boost::ref(ipAddr));
-
-	std::string sql2go("INSERT INTO T010_Eval VALUES ("                                   +
-	    m_QUOTE + lineTimestamp2Seconds(logfileData, line)               + m_QUOTE + ", " +
-	    m_QUOTE + ipAddr[0]                                              + m_QUOTE + ", " +
-	    m_QUOTE + ipAddr[1]                                              + m_QUOTE + ", " +
-	    m_QUOTE + ipAddr[2]                                              + m_QUOTE + ", " +
-	    m_QUOTE + ipAddr[3]                                              + m_QUOTE + ", ?, ?, ?, " +
-	    m_QUOTE + logfileData->getRegexpSvrt(rgxpThreadID)               + m_QUOTE + ", " +
-	    m_QUOTE + createTimestamp()                                      + m_QUOTE + ");");
-
-	try
-	{
-		std::unique_ptr<sql::PreparedStatement> stmnt(conn->prepareStatement(sql2go.data()));
-		stmnt->setString(1, logfileData->getLogFilePath().string());
-		stmnt->setString(2, line);
-		stmnt->setString(3, logfileData->getRegexpText(rgxpThreadID));
-		stmnt->execute();
-
-		m_notifyEval->notifyNew();
-	}
-	catch(sql::SQLException &e)
-	{
-		std::string errMsg('\t' + std::string(e.what()) + '\t' + sql2go + '\t' + line);
-		LogManager::getInstance()->logEvent("insertIntoEvalTable_CATCH", errMsg.c_str());
-		LogManager::getInstance()->consoleMsg((std::string("*DEAD*\t") +  errMsg).c_str());
-	}
-
-	conn->close();
-}*/
+}
 
 void LogScanner::insertIntoHistTable(ConfContainer *logfileData, Workarea *threadWkArea, std::string *linePtr, int rgxpThreadID)
 {
@@ -2153,42 +2047,7 @@ void LogScanner::insertIntoHistTable(ConfContainer *logfileData, Workarea *threa
 	// Notify LogScanner::execSqlInsert thread for this table.
 //LogManager::getInstance()->consoleMsg(("DBG_NOTIFYING insert into table (insertIntoHistTable)!!!\t" + tableName + '\t' + sql2go).c_str());  //FIXTHIS!!!
 	notifyIPC->second->notifyNew();
-}/*
-{
-	// mysql is dead-locking here, so...
-//	boost::mutex::scoped_lock lock(m_mutex4sql);
-
-	std::array<std::string, 4> ipAddr;
-	threadWkArea->getIPaddrOctects(boost::ref(ipAddr));
-
-	std::string sql2go("INSERT INTO T040_Hist VALUES ("                                    +
-	    m_QUOTE + lineTimestamp2Seconds(logfileData, line)               + m_QUOTE + ", " +
-	    m_QUOTE + ipAddr[0]                                              + m_QUOTE + ", " +
-	    m_QUOTE + ipAddr[1]                                              + m_QUOTE + ", " +
-	    m_QUOTE + ipAddr[2]                                              + m_QUOTE + ", " +
-	    m_QUOTE + ipAddr[3]                                              + m_QUOTE + ", ?, ?, ?, " +
-	    m_QUOTE + logfileData->getRegexpSvrt(rgxpThreadID)               + m_QUOTE + ", " +
-	    m_QUOTE + createTimestamp()                                      + m_QUOTE + ");");
-
-	std::unique_ptr<sql::Connection> conn(connectToDB());
-
-	try
-	{
-		std::unique_ptr<sql::PreparedStatement> stmnt(conn->prepareStatement(sql2go.data()));
-		stmnt->setString(1, logfileData->getLogFilePath().string());
-		stmnt->setString(2, line);
-		stmnt->setString(3, logfileData->getRegexpText(rgxpThreadID));
-		stmnt->execute();
-	}
-	catch(sql::SQLException &e)
-	{
-		std::string errMsg('\t' + std::string(e.what()) + '\t' + sql2go + '\t' + line);
-		LogManager::getInstance()->logEvent("insertIntoHistTable_CATCH", errMsg.c_str());
-		LogManager::getInstance()->consoleMsg((std::string("*DEAD*\t") +  errMsg).c_str());
-	}
-
-	conn->close();
-}*/
+}
 
 void LogScanner::insertIntoDropTable(std::array<std::string, 4> &ipAddr, const char *ProcName, std::string *lineOrTmstmp, char Status)
 {
@@ -2237,69 +2096,15 @@ void LogScanner::insertIntoDropTable(std::array<std::string, 4> &ipAddr, const c
 	// Notify LogScanner::execSqlInsert thread for this table.
 //LogManager::getInstance()->consoleMsg(("DBG_NOTIFYING insert into table (nsertIntoDropTable)!!!\t" + tableName + '\t' + sql2go).c_str());  //FIXTHIS!!!
 	notifyIPC->second->notifyNew();
-}/*
-{
-	// mysql is dead-locking here, so...
-
-	std::string sql2go(writeSqlInsertForDrop(boost::ref(ipAddr), 'N', "LogScanner::insertIntoDropTable"));
-
-	std::unique_ptr<sql::Connection> conn(connectToDB());
-
-	try
-	{
-		// mysql is dead-locking here, so...
-		boost::mutex::scoped_lock lock(m_mutex4sql);
-
-		std::unique_ptr<sql::PreparedStatement> stmnt(conn->prepareStatement(sql2go.data()));
-		stmnt->execute();
-
-		m_notifyDrop->notifyNew();
-	}
-	catch(sql::SQLException &e)
-	{
-		std::string errMsg('\t' + std::string(e.what()) + '\t' + sql2go);
-		LogManager::getInstance()->logEvent("insertIntoDropTable_CATCH", errMsg.c_str());
-		LogManager::getInstance()->consoleMsg((std::string("*DEAD*\t") +  errMsg).c_str());
-	}
-
-	conn->close();
 }
-
-std::string LogScanner::writeSqlInsertForDrop(std::array<std::string, 4> &ipAddr, const char *ProcName, char Status)
-{
-// CREATE TABLE T030_Drop(
-// 	Timestamp VARCHAR(20)   NOT NULL,
-// 	Octect_1  INT           NOT NULL, constraint Octect_1_HST check(Octect_1 >  0), constraint Octect_1_LST check(Octect_1 < 256),
-// 	Octect_2  INT           NOT NULL, constraint Octect_2_HST check(Octect_2 >= 0), constraint Octect_2_LST check(Octect_2 < 256),
-// 	Octect_3  INT           NOT NULL, constraint Octect_3_HST check(Octect_3 >= 0), constraint Octect_3_LST check(Octect_3 < 256),
-// 	Octect_4  INT           NOT NULL, constraint Octect_4_HST check(Octect_4 >= 0), constraint Octect_4_LST check(Octect_4 < 256),
-// 	ProcName  VARCHAR(1024) NOT NULL,
-// 	Logfile   VARCHAR(1024),
-// 	Status    CHAR          NOT NULL, constraint Status_VAL   check(Status = 'N' OR Status = 'P' OR Status = 'D')
-// --  Status(Status = 'New' OR Status = 'Pending' OR Status = 'Dropped')
-// );
-	return "INSERT IGNORE INTO T030_Drop VALUES ("      +
-	    m_QUOTE + createTimestamp() + m_QUOTE + ", "    +
-	    m_QUOTE + ipAddr[0]         + m_QUOTE + ", "    +
-	    m_QUOTE + ipAddr[1]         + m_QUOTE + ", "    +
-	    m_QUOTE + ipAddr[2]         + m_QUOTE + ", "    +
-	    m_QUOTE + ipAddr[3]         + m_QUOTE + ", "    +
-	    m_QUOTE + ProcName          + m_QUOTE + ", ?, " +
-	    m_QUOTE + Status            + m_QUOTE + ");";
-}*/
 
 void LogScanner::execBatchSQL(std::string &sql2go)
 {
-	// mysql is dead-locking here, so...
-//	boost::mutex::scoped_lock lock(m_mutex4sql);
-
 	std::unique_ptr<sql::Connection> conn(connectToDB());
 
 	try
 	{
 		std::unique_ptr<sql::PreparedStatement> stmnt(conn->prepareStatement(sql2go.data()));
-
-//		boost::mutex::scoped_lock lock(m_mutex4sql);
 		stmnt->execute();
 	}
 //	catch(sql::SQLSyntaxErrorException &e)
@@ -2371,6 +2176,7 @@ void LogScanner::storeIPaddrInArray(const std::string &IPaddr, std::array<std::s
 		IPaArr[Idx] = octect;
 		Idx++;
 	}
+int JUNK_TEST_WHICH_ONE_OF_THESE_IS_FASTER; //FIXTHIS!!!
 //	std::stringstream ss(IPaddr);
 
 //	for(int Idx = 0; Idx < 4; Idx++)

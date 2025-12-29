@@ -83,6 +83,7 @@ class LogScanner
 		bool        initDB();
 
 		void        commThread();
+		void        intfThread();
 		void        SQL_Thread();
 		void        inptThread();
 		void        evalThread();
@@ -95,7 +96,8 @@ class LogScanner
 		void        processingThread(ConfContainer *logfileData, const char *caller, ConveyorBelt *conveyorBelt, int procThreadID, void (ConfContainer::*ptr_writePosOfNextline2Read)());
 		void        regexpExecThread(ConfContainer *logfileData, const char *caller, Workarea *threadWkArea, std::string *linePtr, boost::barrier &barrier, int rgxpThreadID);
 
-		void        monitorLogForRename(ConfContainer *logfileDat);
+		void        monitorNewLineThread(ConfContainer *logfileData);
+		void        monitor4RenameThread(ConfContainer *logfileData);
 
 		bool        chkEvalRegexps(std::array<std::string, 4> &IPaddr);
 
@@ -169,11 +171,12 @@ class LogScanner
 		// There is a ConfContainer for every log file being read.
 		// ConfContainers for LUMP files also contain the list of files to LUMP together.
 		// See logscanner/LumpContainer.h
-		std::vector<std::shared_ptr<ConfContainer>>  m_logfileList;
+		std::vector<std::shared_ptr<ConfContainer>>  m_ConfContainerList;
+		std::set<std::string>                        m_inotifyTargetPaths;
 
 		// This map contains the threads IDs to "kill" when restarting the thread.
 		// See /LogScanner::monitorFirstLine
-		std::vector<boost::thread::native_handle_type>       m_logReadinghreadList;
+//		std::vector<boost::thread::native_handle_type>       m_logReadinghreadList;
 
 		// Whitelisted IPs, IP pattern and descriptionm.
 		std::map<std::string, std::string>  m_whitelist;

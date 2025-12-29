@@ -79,6 +79,9 @@ LumpContainer::LumpContainer(std::string logFilePath, std::map<char, std::string
 							{
 								readTest.close();
 								m_logList.insert(file2test);
+
+								// Next line creates a directory under the LUMP directory.
+								std::filesystem::create_directories(getCtrlBaseName() + "/" + std::filesystem::path(file2test).filename().string());
 							}
 							else
 							{
@@ -175,7 +178,10 @@ bool LumpContainer::initReadLogThread()
 		for(auto lumpComponent : m_logList)
 		{
 			// Start feeding components to the LUMP logfile.
-			m_allThreads.push_back(std::make_shared<boost::thread>(&LumpContainer::feedLumpLogFile, this, lumpComponent, boost::ref(filesSeenCnt)));
+
+			std::string ctrlBaseName(getCtrlBaseName()  + "/" + std::filesystem::path(lumpComponent).filename().string());
+			ValidateAndUpdateFirstLineOf(lumpComponent, ctrlBaseName + m_FSTLINEOFLOGFILE_CTRL);
+			m_allFeedLumpLogFileThreads.push_back(std::make_shared<boost::thread>(&LumpContainer::feedLumpLogFile, this, lumpComponent, boost::ref(filesSeenCnt)));
 		}
 
 		// Wait until all files are open (or not), if any fails to open m_resultFlag is set to false.
@@ -189,30 +195,36 @@ bool LumpContainer::initReadLogThread()
 	return allGood && m_resultFlag;
 }
 
+void LumpContainer::StartWaitForFirstLineThread(std::string logFilePath, std::filesystem::path ctrlFileName)
+{
+	m_allMonitorThreads.push_back(std::make_shared<boost::thread>(&LumpContainer::waitForFirstLineThread, this, logFilePath, ctrlFileName));
+}
+
 void LumpContainer::stopReadLogThread()
 {
-	// m_allThreads holds the pointers for all LumpContainer::feedLumpLogFile executing.
-	for(auto thread : m_allThreads)
+	// We need to release the monitor because INotifyObj::intfThread will not exit.
+	if(RESTART_THREAD.load() == true)
+	{
+		INotifyObj iNotifyObj;
+		for(auto lumpComponent : m_logList)
+		{
+			iNotifyObj.releaseMonitorNewLineThread(lumpComponent);
+			iNotifyObj.releaseMonitor4RenameThread(lumpComponent);
+		}
+	}
+
+	for(auto thread : m_allMonitorThreads)
+	{
+		thread->join();
+	}
+
+	// m_allFeedLumpLogFileThreads holds the pointers for all LumpContainer::feedLumpLogFile executing.
+	for(auto thread : m_allFeedLumpLogFileThreads)
 	{
 		thread->join();
 	}
 
 	ConfContainer::stopReadLogThread();
-}
-
-void LumpContainer::monitorComponentsForRename(std::string lumpComponent, std::string &ctrlFilePath)
-{
-	execMonitorFileForRename(lumpComponent, ctrlFilePath + "/fstline.txt");
-
-	m_logReadingThreadIdListMutex.lock();
-	std::map<std::string, boost::thread::native_handle_type>::iterator thread2kill = m_logReadingThreadIdList.find(lumpComponent);
-
-	if(thread2kill != m_logReadingThreadIdList.end())
-	{
-		LogManager::getInstance()->consoleMsg(("===>  monitorComponentsForRename sending SIGUSR1 for " + thread2kill->first).c_str());
-		pthread_kill(thread2kill->second, SIGUSR1);
-	}
-	m_logReadingThreadIdListMutex.unlock();
 }
 
 void LumpContainer::feedLumpLogFile(std::string lumpComponent, std::atomic<std::size_t> &filesSeenCnt)
@@ -227,15 +239,14 @@ void LumpContainer::feedLumpLogFile(std::string lumpComponent, std::atomic<std::
 
 	std::size_t found = lumpComponent.find_last_of("/");
 	std::string ctrlFilePath(getCtrlBaseName() + "/" + lumpComponent.substr(found + 1));
-	std::string ctrlFileName(ctrlFilePath + "/nextLogline2Read.ctrl");
-
-	std::filesystem::create_directories(ctrlFilePath);
+	std::string ctrlFileName(ctrlFilePath + "/" + m_NEXTLOGLINE2READ_CTRL);
 
 	std::ifstream ifs(lumpComponent, std::ios::in);
 	if(ifs.is_open())
 	{
+		// First check that we are reading the same logfile we were...
 		// Start monitor for name change.
-		std::shared_ptr<boost::thread> monThread(std::make_shared<boost::thread>(boost::thread(&LumpContainer::monitorComponentsForRename, this, lumpComponent, ctrlFilePath)));
+		m_allMonitorThreads.push_back(std::make_shared<boost::thread>(&LumpContainer::monitor4RenameThread, this, lumpComponent));
 
 		// Does ctrlFile file exist?
 		std::ifstream ctrlifs(ctrlFileName, std::ios::in);
@@ -251,6 +262,7 @@ void LumpContainer::feedLumpLogFile(std::string lumpComponent, std::atomic<std::
 
 		// Notify initReadLogThread that this file has been counted.
 		m_condVar.notify_one();
+
 		while(LogScanner::KEEP_LOOPING.load() && !RESTART_THREAD.load())
 		{
 			// Read incoming line...
@@ -273,13 +285,11 @@ void LumpContainer::feedLumpLogFile(std::string lumpComponent, std::atomic<std::
 			if(LogScanner::KEEP_LOOPING.load() && !RESTART_THREAD.load() && ifs.eof())
 			{
 				ifs.clear();
-				inotifyLumpfile(lumpComponent);
+				monitorNewLineThread(lumpComponent);
 			}
 		}
 
 		ifs.close();
-
-		monThread->join();
 	}
 	else
 	{
@@ -297,33 +307,17 @@ void LumpContainer::feedLumpLogFile(std::string lumpComponent, std::atomic<std::
 
 void LumpContainer::writeLineToLumpFile(std::string line, std::filesystem::path logFilePath)
 {
-	boost::mutex::scoped_lock lock(m_writeMutex);
+	m_writeMutex.lock();
 
 	std::ofstream  ofs(logFilePath.string().data(), std::ios_base::app);
 	ofs << line << std::endl;
 	ofs.close();
+
+	m_writeMutex.unlock();
 }
 
-void LumpContainer::inotifyLumpfile(std::filesystem::path logFilePath)
+void LumpContainer::removeAllControlFiles(std::string logFilePath)
 {
-	// Start a thread to monitor a LUMP component.
-	m_logReadingThreadIdListMutex.lock();
-	if(LogScanner::KEEP_LOOPING.load() && !RESTART_THREAD.load())
-	{
-		std::shared_ptr<boost::thread> thread(std::make_shared<boost::thread>(boost::thread(&ConfContainer::execInotifyLogfileThread, this, logFilePath/*, boost::ref(prom)*/)));
-
-		// We need to save thread->native_handle() because execInotifyLogfileThread
-		// locks in inotify "read" while waiting for events.
-		// We need to pthread_kill it to force the thread to exit when the
-		// logfile is renamed (RESTART_THREAD) or a program stop (KEEP_LOOPING)
-		m_logReadingThreadIdList.insert({logFilePath.string(), thread->native_handle()});
-		m_logReadingThreadIdListMutex.unlock();
-
-		thread->join();
-
-		m_logReadingThreadIdListMutex.lock();
-		m_logReadingThreadIdList.erase(logFilePath.string());
-	}
-	m_logReadingThreadIdListMutex.unlock();
+	remove((getCtrlBaseName() + logFilePath + "/").data());
 }
 /**END*/

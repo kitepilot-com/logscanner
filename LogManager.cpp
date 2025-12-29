@@ -14,6 +14,7 @@ LogManager *LogManager::m_thisObj = nullptr;
 
 LogManager::LogManager()
 {
+int JUNK_ADD_PARENTS_AND_LEVELS_TO_REPORTS; //FIXTHIS!!!
 }
 
 LogManager::~LogManager()
@@ -48,20 +49,7 @@ void LogManager::nanosecTimestamp(char *timestamp)
 	//  It is *YOUR* responsibility to send a 'timestamp' big enough for this...
 	snprintf(timestamp, TIMESTAMP_SIZE + 1, "%lld", (long long int)(ts.tv_sec) * (long long int)1000000000 + (long long int)(ts.tv_nsec));
 }
-/*
-void LogManager::logNoMatch(std::string log, std::string line)
-{
-	static const std::string logPath("run/logs/noMatch");
 
-	boost::mutex::scoped_lock lock(m_linMutex);
-	std::string               logName(logPath + log + ".txt");
-
-	std::ofstream  myfile;
-	myfile.open(logName.data(), std::ios_base::app);
-	myfile << line << std::endl;
-	myfile.close();
-}
-*/
 void LogManager::logEvent(const char *log, std::string *str)
 {
 	const char *msg = nullptr;
@@ -76,11 +64,11 @@ void LogManager::logEvent(const char *log, std::string *str)
 
 void LogManager::logEvent(const char *log, const char *msg)
 {
+	m_evtMutex.lock();
+
 	static const std::string logPath("run/logs/exec_");
 	std::string              logName(logPath + log + ".log");
 	char                     timestamp[20];
-
-	boost::mutex::scoped_lock lock(m_evtMutex);
 
 	nanosecTimestamp(timestamp);
 
@@ -88,6 +76,8 @@ void LogManager::logEvent(const char *log, const char *msg)
 	myfile.open(logName.data(), std::ios_base::app);
 	myfile << timestamp << "\t" << log << "\t" << msg << std::endl;
 	myfile.close();
+
+	m_evtMutex.unlock();
 }
 
 void LogManager::consoleMsg(std::string *str)
@@ -104,9 +94,9 @@ void LogManager::consoleMsg(std::string *str)
 
 void LogManager::consoleMsg(const char *msg)
 {
-	char timestamp[20];
+	m_msgMutex.lock();
 
-	boost::mutex::scoped_lock lock(m_msgMutex);
+	char timestamp[20];
 
 	nanosecTimestamp(timestamp);
 	std::cout << timestamp;
@@ -116,5 +106,7 @@ void LogManager::consoleMsg(const char *msg)
 		std::cout << '\t' << msg << "\t(" + std::to_string((pid_t)syscall(__NR_gettid)) << ")";
 	}
 	std::cout  << std::endl;
+
+	m_msgMutex.unlock();
 }
 /*END*/
