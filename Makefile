@@ -4,8 +4,8 @@
 # Last update: Jan-07-25                                                       #
 ################################################################################
 
-logscanner: main.o LogManager.o Workarea.o ConfContainer.o LumpContainer.o ConveyorBelt.o INotifyObj.o NotifyIPC.o LogScanner.o
-	g++ -g -Wall -o logscanner main.o LogManager.o Workarea.o ConfContainer.o LumpContainer.o ConveyorBelt.o INotifyObj.o NotifyIPC.o LogScanner.o -lboost_thread -lboost_chrono -lboost_regex -lmariadbcpp
+logscanner: main.o LogManager.o Workarea.o ConfContainer.o LumpContainer.o ConveyorBelt.o INotifyObj.o NotifyEvent.o LogScanner.o
+	g++ -g -Wall -o logscanner main.o LogManager.o Workarea.o ConfContainer.o LumpContainer.o ConveyorBelt.o INotifyObj.o NotifyEvent.o LogScanner.o -lboost_thread -lboost_chrono -lboost_regex -lmariadbcpp
 
 LogManager.o: LogManager.h LogManager.cpp
 	g++ -g -Wall -c -o LogManager.o LogManager.cpp
@@ -25,10 +25,10 @@ ConveyorBelt.o: LogManager.h ConveyorBelt.h ConveyorBelt.cpp
 INotifyObj.o: LogManager.h INotifyObj.h INotifyObj.cpp
 	g++ -g -Wall -c -o INotifyObj.o INotifyObj.cpp
 
-NotifyIPC.o: LogManager.h NotifyIPC.h NotifyIPC.cpp
-	g++ -g -Wall -c -o NotifyIPC.o NotifyIPC.cpp
+NotifyEvent.o: LogManager.h NotifyEvent.h NotifyEvent.cpp
+	g++ -g -Wall -c -o NotifyEvent.o NotifyEvent.cpp
 
-LogScanner.o: LogManager.h Workarea.h ConfContainer.h LumpContainer.h ConveyorBelt.h INotifyObj.h NotifyIPC.h LogScanner.h LogScanner.cpp
+LogScanner.o: LogManager.h Workarea.h ConfContainer.h LumpContainer.h ConveyorBelt.h INotifyObj.h NotifyEvent.h LogScanner.h LogScanner.cpp
 	g++ -g -Wall -c -o LogScanner.o LogScanner.cpp
 
 main.o: LogScanner.h main.cpp

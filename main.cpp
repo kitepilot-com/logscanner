@@ -57,7 +57,7 @@ void signalHandler(int signum, siginfo_t *info, void *context)
 	else if(signum == SIGUSR1)
 	{
 // REMEMBER => int signals[] = { SIGSEGV, SIGINT, SIGTERM, SIGUSR1};
-int JUNK_USE_SOCKET_AND_DELETE_THIS; //FIXTHIS!!!
+int JUNK_USE_SOCKET_AND_REMOVE_SIGUSR1; //FIXTHIS!!!
 	}
 }
 

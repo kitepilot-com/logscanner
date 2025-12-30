@@ -282,7 +282,7 @@ bool ConfContainer::fileHasBackLog()
 
 	// Case 3.2,2: Special handling:
 	// -----------------------------
-	//    NOTE: this process is gddressed in getCatchupLine().
+	//    NOTE: this process is addressed in getCatchupLine().
 	//      => For each TIMESTAMP group:
 	//        => Remove "{TIMESTAMP}-" from file names (rename).
 	//        => Thread 2 starts reading from "nextCatchup2Read.ctrl" up to "fileOrSegmentEOF.ctrl".

@@ -255,7 +255,7 @@ void INotifyObj::addFile2inotify(const std::string &monType, std::string inotify
 
 	std::pair<INotifyObj::Outcome *, boost::condition_variable *> inotifyInfo{ result, condVar };
 	m_inotifyTargets.insert(std::make_pair(monType + inotifyTarget, inotifyInfo));
-LogManager::getInstance()->consoleMsg(("DBG_addFile2inotify => '" + monType + inotifyTarget + "' => size = " + std::to_string(m_inotifyTargets.size())+ " => KEEP_LOOPING = " + std::string(LogScanner::KEEP_LOOPING.load() ? "T" : "F")).c_str());//FIXTHIS!!!
+
 	m_mutex.unlock();
 }
 
@@ -269,7 +269,7 @@ void INotifyObj::deleteMeAndNotifyOwner(std::map<std::string, std::pair<INotifyO
 
 	// Remove name from list of monitored files...
 	m_inotifyTargets.erase(iterInotifyTargetFiles);
-LogManager::getInstance()->consoleMsg(("DBG_deleteMeAndNotifyOwner => '" + key2find + "' => size = " + std::to_string(m_inotifyTargets.size())+ " => KEEP_LOOPING = " + std::string(LogScanner::KEEP_LOOPING.load() ? "T" : "F")).c_str());//FIXTHIS!!!
+
 	if(key2find != EXIT_FLAG)
 	{
 		// Notify owner.

@@ -1,27 +1,27 @@
 /*******************************************************************************
- * File: logscanner/NotifyIPC.h                                                *
+ * File: logscanner/NotifyEvent.h                                                *
  * Created:     Aug-06-25                                                      *
  * Last update: Aug-06-25                                                      *
  * Top level header file.                                                      *
  *******************************************************************************/
 
-#ifndef NOTIFYIPC_H
-#define NOTIFYIPC_H
+#ifndef NOTIFYEVENT_H
+#define NOTIFYEVENT_H
 
 #include <atomic>
 #include <boost/thread.hpp>
 
-class NotifyIPC
+class NotifyEvent
 {
 	public:
-		NotifyIPC(NotifyIPC *forwardNotify = nullptr);
-		~NotifyIPC();
+		NotifyEvent(NotifyEvent *forwardNotify = nullptr);
+		~NotifyEvent();
 
 		void   notifyNew();
 		void   wait4NotifyNew();
 		bool   recordsPending();
 
-		NotifyIPC *forwardNotify();
+		NotifyEvent *forwardNotify();
 	protected:
 	private:
 		boost::condition_variable m_condVar;
@@ -30,7 +30,7 @@ class NotifyIPC
 		std::atomic<bool>  m_itemsInQueue;
 
 		// Does LogScanner::execSqlInsert,need to notify anyomne after insert?
-		NotifyIPC *m_forwardNotify;
+		NotifyEvent *m_forwardNotify;
 };
-#endif // NOTIFYIPC_H
+#endif // NOTIFYEVENT_H
 /*END*/

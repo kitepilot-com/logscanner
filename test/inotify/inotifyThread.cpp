@@ -15,6 +15,7 @@
 #include <iostream>
 #include <atomic>
 #include <boost/thread.hpp>
+#include <execinfo.h> // Required for backtrace functions
 
 // :%s/LogManager::getInstance()->consoleMsg/consoleMsg/g
 // :%s/consoleMsg/LogManager::getInstance()->consoleMsg/g
@@ -42,11 +43,17 @@ class INotifyObj
 		// If the file is released becuase the program is exiting or another file was renamed result will hold 0.
 		INotifyObj::Outcome  monitorNewLineThread(std::string inotifyTarget);
 		INotifyObj::Outcome  monitor4RenameThread(std::string inotifyTarget);
+
+		// Functions below release the monitoring of files to force thread exit.
+		void releaseMonitorNewLineThread(std::string inotifyTarget);
+		void releaseMonitor4RenameThread(std::string inotifyTarget);
 	protected:
 		typedef enum {
 			_IN_MODIFY = 0,
 			_IN_DELETE = 1
 		} MonType;
+
+		void releaseAllMonitorsFor(std::string key2find);
 
 		void monitorNewLine(std::string inotifyTarget, INotifyObj::Outcome *result, boost::condition_variable *condVar);
 		void monitor4Rename(std::string inotifyTarget, INotifyObj::Outcome *result, boost::condition_variable *condVar);
@@ -226,12 +233,12 @@ void INotifyObj::intfThread(std::set<std::string> &inotifyTargetPaths)
 	}
 
 	std::map<int, std::set<std::string>::iterator> wd_map;
-	for(std::set<std::string>::iterator pathName = inotifyTargetPaths.begin(); pathName != inotifyTargetPaths.end(); pathName++)
+	for(std::set<std::string>::iterator dir2monitor = inotifyTargetPaths.begin(); dir2monitor != inotifyTargetPaths.end(); dir2monitor++)
 	{
-		consoleMsg(("INotifyObj::intfThread adding watch for  " + *pathName).c_str());
+		consoleMsg(("INotifyObj::intfThread adding watch for  " + *dir2monitor).c_str());
 
-		int wd = inotify_add_watch(fd, pathName->data(), IN_MOVED_FROM | IN_DELETE | IN_MODIFY);
-		wd_map[wd] = pathName;
+		int wd = inotify_add_watch(fd, dir2monitor->data(), IN_MOVED_FROM | IN_DELETE | IN_MODIFY);
+		wd_map[wd] = dir2monitor;
 	}
 
 	while(LogScanner::KEEP_LOOPING.load())
@@ -252,49 +259,42 @@ std::cout << "Something happened..." << std::endl;
 		}
 		else
 		{
-//std::cout << "Processing all notifications in buffer. => readSize = " << readSize  << std::endl;
 			// Process all notifications in buffer.
 			int Idx = 0;
 			while(Idx < readSize)
 			{
 				struct inotify_event *event = ( struct inotify_event * ) &buffer[Idx];
-//std::cout << "I don't how this could fail but the man page checks it..." << std::endl;
-				// I don't how this could fail but the man page checks it...
+
+				// I don't see how this could fail but the man page checks it...
 				if(event->len)
 				{
-//std::cout << "If it is not a directory." << std::endl;
 					// If it is not a directory.
 					if(!(event->mask & IN_ISDIR))
 					{
-//std::cout << "Do I care about it?" << std::endl;
 						// Do I care about it?
 						if(event->mask & IN_MOVED_FROM || event->mask & IN_DELETE || event->mask & IN_MODIFY)
 						{
 							std::string wdPath(*(wd_map.find(event->wd)->second));
-//std::cout << "Am I monitoring that file for that mod?\twd = " << event->wd << " in map =>" << wdPath << std::endl;
-//for(auto inotifyTarget : m_inotifyTargets) std::cout << "file in m_inotifyTargets = '" << inotifyTarget.first << "' <=" << std::endl;
-//for(auto inotifyTarget : wd_map) std::cout << "file in wd_map = '" << *(inotifyTarget.second) << "' <=" << std::endl;
+
 							// Am I monitoring that file for that mod?
 							std::string key2find(wdPath + "/" + event->name);
 
 							if(event->mask & IN_MODIFY)
 							{
-std::cout << "STR_IN_MODIFY => (key)'" << (STR_IN_MODIFY  + key2find) << "' <=" << std::endl;
 								key2find = (STR_IN_MODIFY + key2find);
-//								iterInotifyTargetFiles = m_inotifyTargets.find(STR_IN_MODIFY + key2find);
 							}
 							else
 							{
-std::cout << "STR_IN_DELETE => (key)'" << (STR_IN_DELETE  + key2find) << "' <=" << std::endl;
 								key2find = (STR_IN_DELETE + key2find);
-//								iterInotifyTargetFiles = m_inotifyTargets.find(STR_IN_DELETE + key2find);
 							}
 
+							m_mutex.lock();
 							std::multimap<std::string, std::pair<INotifyObj::Outcome *, boost::condition_variable *>>::iterator iterInotifyTargetFiles;
 							while((iterInotifyTargetFiles = m_inotifyTargets.find(key2find)) != m_inotifyTargets.end())
 							{
 								deleteMeAndNotifyOwner(iterInotifyTargetFiles, EVENT_TRUE);
 							}
+							m_mutex.unlock();
 						}
 					}
 				}
@@ -305,18 +305,19 @@ std::cout << "STR_IN_DELETE => (key)'" << (STR_IN_DELETE  + key2find) << "' <=" 
 	}
 std::cout << "INotifyObj::intfThread => OUT of loop <=" << std::endl;
 	// We are done, free up everybody...
-	while(!m_inotifyTargets.empty())
-	{
-		deleteMeAndNotifyOwner(m_inotifyTargets.begin(), EVENT_FALSE);
-	}
-
 	for(std::multimap<int, std::set<std::string>::iterator>::iterator wdIter = wd_map.begin(); wdIter != wd_map.end(); wdIter++)
 	{
 		consoleMsg(("INotifyObj::intfThread delete watch for  " + *(wdIter->second)).c_str());
 		( void ) inotify_rm_watch( fd, wdIter->first );
 	}
-
 	( void ) close( fd );
+
+	m_mutex.lock();
+	while(!m_inotifyTargets.empty())
+	{
+		deleteMeAndNotifyOwner(m_inotifyTargets.begin(), EVENT_FALSE);
+	}
+	m_mutex.unlock();
 
 	consoleMsg("==> EXITING INotifyObj::intfThread");
 }
@@ -359,6 +360,30 @@ std::cout << "MONITORING (monitor4RenameThread) =>" << inotifyTarget << std::end
 	return result;
 }
 
+void INotifyObj::releaseMonitorNewLineThread(std::string inotifyTarget)
+{
+	const static std::string STR_IN_MODIFY(std::to_string(_IN_MODIFY));
+	releaseAllMonitorsFor(STR_IN_MODIFY + inotifyTarget);
+}
+
+void INotifyObj::releaseMonitor4RenameThread(std::string inotifyTarget)
+{
+	const static std::string STR_IN_DELETE(std::to_string(_IN_DELETE));
+	releaseAllMonitorsFor(STR_IN_DELETE + inotifyTarget);
+}
+
+void INotifyObj::releaseAllMonitorsFor(std::string key2find)
+{
+	std::multimap<std::string, std::pair<INotifyObj::Outcome *, boost::condition_variable *>>::iterator iterInotifyTargetFiles;
+
+	m_mutex.lock();
+	while((iterInotifyTargetFiles = m_inotifyTargets.find(key2find)) != m_inotifyTargets.end())
+	{
+		deleteMeAndNotifyOwner(iterInotifyTargetFiles, EVENT_FALSE);
+	}
+	m_mutex.unlock();
+}
+
 void INotifyObj::monitorNewLine(std::string inotifyTarget, INotifyObj::Outcome *result, boost::condition_variable *condVar)
 {
 	const static std::string STR_IN_MODIFY(std::to_string(_IN_MODIFY));
@@ -374,56 +399,85 @@ void INotifyObj::monitor4Rename(std::string inotifyTarget, INotifyObj::Outcome *
 void INotifyObj::addFile2inotify(const std::string &monType, std::string inotifyTarget, INotifyObj::Outcome *result, boost::condition_variable *condVar)
 {
 	m_mutex.lock();
-std::cout << "**** ADDING inotify =>" << monType + inotifyTarget << "<= TO m_inotifyTargets ****" << std::endl;
+
 	std::pair<INotifyObj::Outcome *, boost::condition_variable *> inotifyInfo{ result, condVar };
 	m_inotifyTargets.insert(std::make_pair(monType + inotifyTarget, inotifyInfo));
-
+consoleMsg(("DBG_addFile2inotify => '" + monType + inotifyTarget + "' => size = " + std::to_string(m_inotifyTargets.size())+ " => KEEP_LOOPING = " + std::string(LogScanner::KEEP_LOOPING.load() ? "T" : "F")).c_str());//FIXTHIS!!!
 	m_mutex.unlock();
 }
 
-void INotifyObj::deleteMeAndNotifyOwner(std::multimap<std::string, std::pair<INotifyObj::Outcome *, boost::condition_variable *>>::iterator iterInotifyTargetFiles, INotifyObj::Outcome outcome)
+void INotifyObj::deleteMeAndNotifyOwner(std::map<std::string, std::pair<INotifyObj::Outcome *, boost::condition_variable *>>::iterator iterInotifyTargetFiles, INotifyObj::Outcome outcome)
 {
 	const static std::string EXIT_FLAG = std::to_string(_IN_DELETE) + m_inotifyExitFlag;
 
-	m_mutex.lock();
-
-	std::string                pathName = iterInotifyTargetFiles->first;
+	std::string                key2find = iterInotifyTargetFiles->first;
 	INotifyObj::Outcome       *result   = iterInotifyTargetFiles->second.first;
 	boost::condition_variable *condVar  = iterInotifyTargetFiles->second.second;
-std::cout << "IN INotifyObj::deleteMeAndNotifyOwner => '" << (iterInotifyTargetFiles->first) << "' <= condvar = " << reinterpret_cast<uintptr_t>(condVar) << std::endl;
+
 	// Remove name from list of monitored files...
 	m_inotifyTargets.erase(iterInotifyTargetFiles);
-
-	if(pathName != EXIT_FLAG)
+consoleMsg(("DBG_deleteMeAndNotifyOwner => '" + key2find + "' => size = " + std::to_string(m_inotifyTargets.size())+ " => KEEP_LOOPING = " + std::string(LogScanner::KEEP_LOOPING.load() ? "T" : "F")).c_str());//FIXTHIS!!!
+	if(key2find != EXIT_FLAG)
 	{
-std::cout << "**** IN deleteMeAndNotifyOwner // Notify owner." << std::endl;
 		// Notify owner.
 		*result = outcome;
 		condVar->notify_one();
 	}
-
-	m_mutex.unlock();
 }
 ////////////////////////////   COPY THIS   ^^^^^^^^^^^^^^^^^^^^^^^^^^^    TO "logscanner/INotifyObj.cpp"
 
-void signalHandler(int signum)
+#define STACK_DEPTH_LIMIT 50
+
+void signalHandler(int signum, siginfo_t *info, void *context)
 {
-std::cout << "IN signalHandler => signum = " << signum << "' <=" << std::endl;
+	// (gdb) handle SIGINT pass nostop print
+	// (gdb) signal SIGINT
+	consoleMsg(("Signal received => " + std::to_string((int)signum)).data());
+
 	if(signum == SIGINT|| signum == SIGTERM)
 	{
+consoleMsg("Signal received => LogScanner::KEEP_LOOPING.store(false);");
 		LogScanner::KEEP_LOOPING.store(false);
-std::cout << "IN signalHandler => removing = " << INotifyObj::getIinotifyExitFlag() << " <=" << std::endl;
 		remove(INotifyObj::getIinotifyExitFlag().data());
+		consoleMsg(("Signal received removed => " + INotifyObj::getIinotifyExitFlag()).data());
+	}
+	else if(signum == SIGSEGV)
+	{
+		void* callstack[STACK_DEPTH_LIMIT];
+		int frames;
+
+		// Use async-signal-safe functions where possible. 
+		// write() is safe, printf() is not.
+		const char msg1[] = "Caught SIGSEGV (Segmentation Fault).\n";
+		write(STDERR_FILENO, msg1, sizeof(msg1) - 1);
+
+		const char msg2[] = "Stack trace:\n";
+		write(STDERR_FILENO, msg2, sizeof(msg2) - 1);
+
+		// Get the stack frames (addresses)
+		frames = backtrace(callstack, STACK_DEPTH_LIMIT);
+
+		// Print the stack frames to stderr using a signal-safe function
+		backtrace_symbols_fd(callstack, frames, STDERR_FILENO);
+
+		// Print information about the faulting address
+		char buf[100];
+		int len = snprintf(buf, sizeof(buf), "Faulting address: 0x%lx\n", (long)info->si_addr);
+		write(STDERR_FILENO, buf, len);
+
+		// Exit the program safely. _exit() is async-signal-safe.
+		_exit(EXIT_FAILURE);
 	}
 	else if(signum == SIGUSR1)
 	{
-		// Do nothing...
+// REMEMBER => int signals[] = { SIGSEGV, SIGINT, SIGTERM, SIGUSR1};
+int JUNK_USE_SOCKET_AND_REMOVE_SIGUSR1; //FIXTHIS!!!
 	}
 }
 
 int setSignalHandlers()
 {
-	int signals[] = { SIGINT, SIGTERM, SIGUSR1};
+	int signals[] = { SIGSEGV, SIGINT, SIGTERM, SIGUSR1};
 	int size = (int)(sizeof(signals) / sizeof(int));
 	int Idx = 0;
 	int res = 0;
@@ -432,9 +486,9 @@ int setSignalHandlers()
 	{
 		struct sigaction SIG_handler;
 
-		SIG_handler.sa_handler = signalHandler;
+		SIG_handler.sa_sigaction = signalHandler;
+		SIG_handler.sa_flags = SA_SIGINFO; // Use sa_sigaction field, pass siginfo_t
 		sigemptyset(&SIG_handler.sa_mask);
-		SIG_handler.sa_flags = 0;
 
 		if(sigaction(signals[Idx], &SIG_handler, NULL) == -1)
 		{
@@ -465,6 +519,7 @@ int main(int argc, char* argv[])
 	{
 		std::cerr << "Unable to set signal handler ." << std::endl;
 	}
-std::cout << "====> DONE <====" << std::endl;
+
+	std::cout << "====> DONE <====" << std::endl;
 }
 /*END*/

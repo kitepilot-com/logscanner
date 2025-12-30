@@ -18,7 +18,7 @@
 
 #include "ConfContainer.h"
 #include "Workarea.h"
-#include "NotifyIPC.h"
+#include "NotifyEvent.h"
 //#include <boost/interprocess/sync/named_semaphore.hpp>
 
 class ConveyorBelt;
@@ -89,7 +89,7 @@ class LogScanner
 		void        evalThread();
 		void        dropThread();
 
-		void        execSqlInsert(std::string tableName, NotifyIPC *notifyIPC);
+		void        execSqlInsert(std::string tableName, NotifyEvent *notifyEvent);
 
 		void        logReadingThread(ConfContainer *logfileData);
 		void        catchUpLogThread(ConfContainer *logfileData);
@@ -137,7 +137,7 @@ class LogScanner
 		// This could be arguments...  ^^^^^^^^^^^^^^^^^^^^
 
 		// IPC
-		std::map<std::string, std::shared_ptr<NotifyIPC>>  m_NotifyIPC_list;
+		std::map<std::string, std::shared_ptr<NotifyEvent>>  m_NotifyEvent_list;
 		static constexpr char                              m_SQL_IPC_PATH[] = "run/sql";
 		static std::string                                 m_BASE_SEMAPHORE_NAME;
 
@@ -182,8 +182,8 @@ class LogScanner
 		std::map<std::string, std::string>  m_whitelist;
 
 		// IPC...
-		NotifyIPC m_notifyEval;
-		NotifyIPC m_notifyDrop;
+		NotifyEvent m_notifyEval;
+		NotifyEvent m_notifyDrop;
 };
 #endif // LOGSCANNER_H
 /*END*/

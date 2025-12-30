@@ -16,7 +16,7 @@
 
 #include "ConfContainer.h"
 #include "Workarea.h"
-#include "NotifyIPC.h"
+#include "NotifyEvent.h"
 #include <boost/thread/barrier.hpp>
 //#include <boost/interprocess/sync/named_semaphore.hpp>
 */

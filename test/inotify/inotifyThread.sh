@@ -22,7 +22,7 @@ done # }
 mkdir -pv ${TRASHPATH}
 mkdir -pv ${FLAG_PATH}
 
-clear;(cd logscanner/test/inotify/ && ./inotifyThread &)
+(cd logscanner/test/inotify/ && ./inotifyThread &)
 MY_PID="$(ps -ef|grep '\./inotifyThread'|grep -v grep|awk '{print $2}')"
 sleep 1
 

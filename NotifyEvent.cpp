@@ -1,24 +1,24 @@
 /*******************************************************************************
- * File: logscanner/NotifyIPC.cpp                                              *
+ * File: logscanner/NotifyEvent.cpp                                              *
  * Created:     Aug-06-25                                                      *
  * Last update: Aug-06-25                                                      *
  * Program start.                                                              *
  *******************************************************************************/
 
 #include "LogManager.h"
-#include "NotifyIPC.h"
+#include "NotifyEvent.h"
 
-NotifyIPC::NotifyIPC(NotifyIPC *forwardNotify) :
+NotifyEvent::NotifyEvent(NotifyEvent *forwardNotify) :
 	m_itemsInQueue(false),
 	m_forwardNotify(forwardNotify)
 {
 }
 
-NotifyIPC::~NotifyIPC()
+NotifyEvent::~NotifyEvent()
 {
 }
 
-void NotifyIPC::notifyNew()
+void NotifyEvent::notifyNew()
 {
 //LogManager::getInstance()->consoleMsg(("DBG_NTFY_ENTERING_notifyNew").c_str());  //FIXTHIS!!!
 	m_itemsInQueue.store(true);
@@ -26,7 +26,7 @@ void NotifyIPC::notifyNew()
 //LogManager::getInstance()->consoleMsg(("DBG_NTFY_EXITING_notifyNew").c_str());  //FIXTHIS!!!
 }
 
-void NotifyIPC::wait4NotifyNew()
+void NotifyEvent::wait4NotifyNew()
 {
 //LogManager::getInstance()->consoleMsg(("DBG_NTFY_ENTERING_wait4NotifyNew").c_str());  //FIXTHIS!!!
 	boost::mutex                     condVarMutex;
@@ -41,7 +41,7 @@ void NotifyIPC::wait4NotifyNew()
 //LogManager::getInstance()->consoleMsg(("DBG_NTFY_EXITING_wait4NotifyNew").c_str());  //FIXTHIS!!!
 }
 
-bool NotifyIPC::recordsPending()
+bool NotifyEvent::recordsPending()
 {
 	bool thereAreRecordsPending = m_itemsInQueue.load();
 //LogManager::getInstance()->consoleMsg(("DBG_NTFY_ENTERING_recordsPending\tm_itemsInQueue => " + (m_itemsInQueue.load() ? "T" : "F")).c_str());  //FIXTHIS!!!
@@ -49,7 +49,7 @@ bool NotifyIPC::recordsPending()
 	return thereAreRecordsPending;
 }
 
-NotifyIPC *NotifyIPC::forwardNotify()
+NotifyEvent *NotifyEvent::forwardNotify()
 {
 	return m_forwardNotify;
 }

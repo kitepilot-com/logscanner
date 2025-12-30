@@ -35,8 +35,8 @@ LogScanner::LogScanner() :
 	m_url(m_DB_URL),
 	m_properties({{"user", m_DB_USER}, {"password", m_DB_PSWD}}),
 	m_driver(sql::mariadb::get_driver_instance()),
-	m_notifyEval(NotifyIPC()),
-	m_notifyDrop(NotifyIPC())
+	m_notifyEval(NotifyEvent()),
+	m_notifyDrop(NotifyEvent())
 {
 int JUNK_GET_INIT_OUT_OF_CONSTRUCTORS_0; int JUNK_GET_INIT_OUT_OF_CONSTRUCTORS_1; int JUNK_GET_INIT_OUT_OF_CONSTRUCTORS_2; int JUNK_GET_INIT_OUT_OF_CONSTRUCTORS_3; //FIXTHIS!!!
 	LogManager::init();
@@ -112,15 +112,15 @@ int JUNK_FIX_NAMING_AND_STRUCTURE_OF_DIRECTORIES; //FIXTHIS!!!
 		// Wait for inotify.
 		intf->join();
 
-		// Release the NotifyIPC that are locked.
+		// Release the NotifyEvent that are locked.
 		LogManager::getInstance()->consoleMsg("LogScanner::inptThread sending sending notifyNew to everybody...");
 		m_notifyEval.notifyNew();
 		m_notifyDrop.notifyNew();
 
 		// Release al execSqlInsert threads.
-		for(auto notifyIPC : m_NotifyIPC_list)
+		for(auto notifyEvent : m_NotifyEvent_list)
 		{
-			notifyIPC.second.get()->notifyNew();
+			notifyEvent.second.get()->notifyNew();
 		}
 
 		LogManager::getInstance()->consoleMsg("ALL notifyNew sent!");
@@ -852,7 +852,7 @@ bool LogScanner::initDB()
 
 	if(conn->isValid())
 	{
-		// Read table names to create NotifyIPC objects.
+		// Read table names to create NotifyEvent objects.
 		try
 		{
 			std::unique_ptr<sql::Statement> stmt(conn->createStatement());
@@ -870,7 +870,7 @@ bool LogScanner::initDB()
 					std::filesystem::create_directories(("run/sql/" + tableName).c_str());  	//FIXTHIS!!!   Use variables..
 
 					// I don't like this but...
-					NotifyIPC *notyfyAfterInsert;
+					NotifyEvent *notyfyAfterInsert;
 					if(tableName == "T010_Eval")
 					{
 						notyfyAfterInsert = &m_notifyEval;
@@ -880,16 +880,16 @@ bool LogScanner::initDB()
 						notyfyAfterInsert = &m_notifyDrop;
 					}
 
-					// std::map<std::string, std::shared_ptr<NotifyIPC>> m_NotifyIPC_list;
-					std::shared_ptr<NotifyIPC> tempPtr(new NotifyIPC(notyfyAfterInsert));
-					m_NotifyIPC_list.insert( {IPCnotifyKey, tempPtr} );
+					// std::map<std::string, std::shared_ptr<NotifyEvent>> m_NotifyEvent_list;
+					std::shared_ptr<NotifyEvent> tempPtr(new NotifyEvent(notyfyAfterInsert));
+					m_NotifyEvent_list.insert( {IPCnotifyKey, tempPtr} );
 				}
 			}
 
-			for(auto notifyIPC : m_NotifyIPC_list)
+			for(auto notifyEvent : m_NotifyEvent_list)
 			{
-//				std::map<std::string, NotifyIPC *>   m_NotifyIPC_list;
-				LogManager::getInstance()->consoleMsg(("=>\t" + notifyIPC.first).c_str());
+//				std::map<std::string, NotifyEvent *>   m_NotifyEvent_list;
+				LogManager::getInstance()->consoleMsg(("=>\t" + notifyEvent.first).c_str());
 			}
 
 			LogManager::getInstance()->consoleMsg();
@@ -904,7 +904,7 @@ bool LogScanner::initDB()
 //			std::cerr << " (MySQL error code: " << e.getErrorCode();
 //			std::cerr << ", SQLState: " << e.getSQLState() << ")" << std::endl;
 		}
-//		loadNotifyIPC_list();
+//		loadNotifyEvent_list();
 
 		conn->close();
 	}
@@ -984,18 +984,18 @@ void LogScanner::SQL_Thread()
 	// This thread creates a thread for every SQL table.
 	// Each of those threads wait for notifications that text files have been created,
 	// then it reads those text files and executes the SQL statements on them.
-//	std::map<std::string, NotifyIPC *>::iterator notifyIPC/
+//	std::map<std::string, NotifyEvent *>::iterator notifyEvent/
 	LogManager::getInstance()->consoleMsg(">> STARTING SQL_Thread => Hello World");
 
 	std::vector<std::shared_ptr<boost::thread>> allThreads;
 
-	for(auto notifyIPC : m_NotifyIPC_list)
+	for(auto notifyEvent : m_NotifyEvent_list)
 	{
 		// Extract the table name.
-		std::string tableName(notifyIPC.first);
+		std::string tableName(notifyEvent.first);
 
 		// Start a "execSqlInsert Thread" for every SQL table.
-		allThreads.push_back(std::make_shared<boost::thread>(&LogScanner::execSqlInsert, this, tableName, notifyIPC.second.get()));
+		allThreads.push_back(std::make_shared<boost::thread>(&LogScanner::execSqlInsert, this, tableName, notifyEvent.second.get()));
 	}
 
 	for(auto thread : allThreads)
@@ -1289,7 +1289,7 @@ void LogScanner::dropThread()
 	LogManager::getInstance()->consoleMsg(">> EXITING dropThread => Bye bye cruel World");
 }
 
-void LogScanner::execSqlInsert(std::string tableName, NotifyIPC *notifyIPC)
+void LogScanner::execSqlInsert(std::string tableName, NotifyEvent *notifyEvent)
 {
 	// This thread reads the files created by LogScanner::insertInto.*Table
 	// and excutes the SQL statements.
@@ -1305,13 +1305,13 @@ void LogScanner::execSqlInsert(std::string tableName, NotifyIPC *notifyIPC)
 	while(KEEP_LOOPING.load())
 	{
 		// This wait4NotifyNew is set from LogScanner::insertInto.*Table
-		notifyIPC->wait4NotifyNew();
+		notifyEvent->wait4NotifyNew();
 
 		if(KEEP_LOOPING.load())
 		{
 			std::unique_ptr<sql::Connection> conn(connectToDB());
 
-			while(KEEP_LOOPING.load() && notifyIPC->recordsPending())
+			while(KEEP_LOOPING.load() && notifyEvent->recordsPending())
 			{
 				// Read the /run/sql/{tableName} directory.
 //				for (auto const& dir_entry : std::filesystem::directory_iterator{FsPath})
@@ -1366,9 +1366,9 @@ void LogScanner::execSqlInsert(std::string tableName, NotifyIPC *notifyIPC)
 
 									remove(sqlFile.c_str());
 
-									if(notifyIPC->forwardNotify() != nullptr)
+									if(notifyEvent->forwardNotify() != nullptr)
 									{
-										notifyIPC->forwardNotify()->notifyNew();
+										notifyEvent->forwardNotify()->notifyNew();
 									}
 								}
 								catch(sql::SQLException &e)
@@ -1868,8 +1868,8 @@ void LogScanner::insertIntoSeenTable(ConfContainer *logfileData, std::string &li
 {
 	static std::string tableName("T100_LinesSeen");
 
-	// Extract NotifyIPC pointer from map.
-	static std::map<std::string, std::shared_ptr<NotifyIPC>>::iterator notifyIPC(m_NotifyIPC_list.find(tableName));
+	// Extract NotifyEvent pointer from map.
+	static std::map<std::string, std::shared_ptr<NotifyEvent>>::iterator notifyEvent(m_NotifyEvent_list.find(tableName));
 
 	// SQL file name..
 	static std::string   baseName(std::string(m_SQL_IPC_PATH) + "/" + tableName + "/" + tableName + "_");
@@ -1901,15 +1901,15 @@ void LogScanner::insertIntoSeenTable(ConfContainer *logfileData, std::string &li
 
 	// Notify LogScanner::execSqlInsert thread for this table.
 //LogManager::getInstance()->consoleMsg(("DBG_NOTIFYING insert into table (insertIntoSeenTable)!!!\t" + tableName + '\t' + sql2go).c_str());  //FIXTHIS!!!
-	notifyIPC->second->notifyNew();
+	notifyEvent->second->notifyNew();
 }
 
 void LogScanner::insertIntoAudtTable(ConfContainer *logfileData, Workarea *threadWkArea, std::string *linePtr, int rgxpThreadID)
 {
 	static std::string tableName("T020_Audit");
 
-	// Extract NotifyIPC pointer from map.
-	static std::map<std::string, std::shared_ptr<NotifyIPC>>::iterator notifyIPC(m_NotifyIPC_list.find(tableName));
+	// Extract NotifyEvent pointer from map.
+	static std::map<std::string, std::shared_ptr<NotifyEvent>>::iterator notifyEvent(m_NotifyEvent_list.find(tableName));
 
 	// SQL file name..
 	static std::string   baseName(std::string(m_SQL_IPC_PATH) + "/" + tableName + "/" + tableName + "_");
@@ -1950,15 +1950,15 @@ void LogScanner::insertIntoAudtTable(ConfContainer *logfileData, Workarea *threa
 
 	// Notify LogScanner::execSqlInsert thread for this table.
 //LogManager::getInstance()->consoleMsg(("DBG_NOTIFYING insert into table (insertIntoAudtTable)!!!\t" + tableName + '\t' + sql2go).c_str());  //FIXTHIS!!!
-	notifyIPC->second->notifyNew();
+	notifyEvent->second->notifyNew();
 }
 
 void LogScanner::insertIntoEvalTable(ConfContainer *logfileData, Workarea *threadWkArea, std::string *linePtr, int rgxpThreadID)
 {
 	static std::string tableName("T010_Eval");
 
-	// Extract NotifyIPC pointer from map.
-	static std::map<std::string, std::shared_ptr<NotifyIPC>>::iterator notifyIPC(m_NotifyIPC_list.find(tableName));
+	// Extract NotifyEvent pointer from map.
+	static std::map<std::string, std::shared_ptr<NotifyEvent>>::iterator notifyEvent(m_NotifyEvent_list.find(tableName));
 
 	// SQL file name..
 	static std::string   baseName(std::string(m_SQL_IPC_PATH) + "/" + tableName + "/" + tableName + "_");
@@ -1998,15 +1998,15 @@ void LogScanner::insertIntoEvalTable(ConfContainer *logfileData, Workarea *threa
 
 	// Notify LogScanner::execSqlInsert thread for this table.
 //LogManager::getInstance()->consoleMsg(("DBG_NOTIFYING insert into table (insertIntoEvalTable)!!!\t" + tableName + '\t' + sql2go).c_str());  //FIXTHIS!!!
-	notifyIPC->second->notifyNew();
+	notifyEvent->second->notifyNew();
 }
 
 void LogScanner::insertIntoHistTable(ConfContainer *logfileData, Workarea *threadWkArea, std::string *linePtr, int rgxpThreadID)
 {
 	static std::string tableName("T040_Hist");
 
-	// Extract NotifyIPC pointer from map.
-	static std::map<std::string, std::shared_ptr<NotifyIPC>>::iterator notifyIPC(m_NotifyIPC_list.find(tableName));
+	// Extract NotifyEvent pointer from map.
+	static std::map<std::string, std::shared_ptr<NotifyEvent>>::iterator notifyEvent(m_NotifyEvent_list.find(tableName));
 
 	// SQL file name..
 	static std::string   baseName(std::string(m_SQL_IPC_PATH) + "/" + tableName + "/" + tableName + "_");
@@ -2046,15 +2046,15 @@ void LogScanner::insertIntoHistTable(ConfContainer *logfileData, Workarea *threa
 
 	// Notify LogScanner::execSqlInsert thread for this table.
 //LogManager::getInstance()->consoleMsg(("DBG_NOTIFYING insert into table (insertIntoHistTable)!!!\t" + tableName + '\t' + sql2go).c_str());  //FIXTHIS!!!
-	notifyIPC->second->notifyNew();
+	notifyEvent->second->notifyNew();
 }
 
 void LogScanner::insertIntoDropTable(std::array<std::string, 4> &ipAddr, const char *ProcName, std::string *lineOrTmstmp, char Status)
 {
 	static std::string tableName("T030_Drop");
 
-	// Extract NotifyIPC pointer from map.
-	static std::map<std::string, std::shared_ptr<NotifyIPC>>::iterator notifyIPC(m_NotifyIPC_list.find(tableName));
+	// Extract NotifyEvent pointer from map.
+	static std::map<std::string, std::shared_ptr<NotifyEvent>>::iterator notifyEvent(m_NotifyEvent_list.find(tableName));
 
 	// SQL file name..
 	static std::string   baseName(std::string(m_SQL_IPC_PATH) + "/" + tableName + "/" + tableName + "_");
@@ -2095,7 +2095,7 @@ void LogScanner::insertIntoDropTable(std::array<std::string, 4> &ipAddr, const c
 
 	// Notify LogScanner::execSqlInsert thread for this table.
 //LogManager::getInstance()->consoleMsg(("DBG_NOTIFYING insert into table (nsertIntoDropTable)!!!\t" + tableName + '\t' + sql2go).c_str());  //FIXTHIS!!!
-	notifyIPC->second->notifyNew();
+	notifyEvent->second->notifyNew();
 }
 
 void LogScanner::execBatchSQL(std::string &sql2go)
