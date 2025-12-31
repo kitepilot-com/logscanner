@@ -6,6 +6,7 @@
  *******************************************************************************/
 
 #include <iostream>
+#include <boost/thread.hpp>
 
 #include "LogManager.h"
 #include "Workarea.h"
@@ -35,7 +36,8 @@ void Workarea::saveIPaddreess(std::array<std::string, 4> &ipAddr, bool whitelist
 {
 	// We will only hit this function in parallel when 2 regexps match the same line.
 	// That sould not happen, fix the regexp, the line will be flagged in "lines seen".
-	m_regexpSyncMtx.lock();
+	boost::mutex regexpSyncMtx;
+	regexpSyncMtx.lock();
 
 	m_ipAddr[0] = ipAddr[0];
 	m_ipAddr[1] = ipAddr[1];
@@ -45,7 +47,7 @@ void Workarea::saveIPaddreess(std::array<std::string, 4> &ipAddr, bool whitelist
 
 	m_whitelisted = whitelisted;
 
-	m_regexpSyncMtx.unlock();
+	regexpSyncMtx.unlock();
 }
 
 void Workarea::getIPaddrOctects(std::array<std::string, 4> &ipAddr)

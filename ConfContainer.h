@@ -75,6 +75,8 @@ class ConfContainer
 		void                         writePosOfNextCatchup2Read();
 		bool                         eofLiveLog();
 		bool                         eofCatchUp();
+
+		void        waitForFirstLineThread(std::string logFilePath, std::filesystem::path ctrlFileName);
 	protected:
 		static constexpr char m_FSTLINEOFLOGFILE_CTRL[] = "/fstLineOfLogfile.ctrl";
 		static constexpr char m_FILEORSEGMENTEOF_CTRL[] = "/fileOrSegmentEOF.ctrl";
@@ -84,7 +86,6 @@ class ConfContainer
 		StatusVal          m_state;
 
 		std::string getCtrlBaseName();   // m_ctrlBaseName
-		void        waitForFirstLineThread(std::string logFilePath, std::filesystem::path ctrlFileName);
 		void        ValidateAndUpdateFirstLineOf(std::string logFilePath, std::filesystem::path ctrlFileName);
 		bool        refreshCtrlValOf(std::streampos &ctrlVal);
 		bool        setCtrlValOf(std::string ctrlFile, std::streampos &ctrlVal);

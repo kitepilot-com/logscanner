@@ -1,0 +1,21 @@
+Startup: (ConfContainer::fileHasBackLog())
+------------------------------------------
+ Case 1: The program has a fresh start on an empty logfile -> Control files SHOULD NOT exist.
+ Case 2: The program has a fresh start on a non empty logfile -> Control files SHOULD NOT exist.
+ Case 3: The program starts after it has been interrupted -> nextLogline2Read.ctrl DOES exist.
+   Case 3.1: Case 1 has been interrupted -> "nextCatchup2Read.ctrl" and "fileOrSegmentEOF.ctrl" DO NOT exist.
+     Case 3.1,1: EOF == "nextLogline2Read.ctrl" -> NO NEW LINES have been appended.
+     Case 3.1,2: EOF > "nextLogline2Read.ctrl" ->  NEW LINES HAVE been appended.
+   Case 3.2: Case 2 has been interrupted -> "nextCatchup2Read.ctrl" and "fileOrSegmentEOF.ctrl" exist.
+     Case 3.2,1: EOF == "nextLogline2Read.ctrl" -> NO NEW LINES have been appended.
+     Case 3.2,2: EOF > "fileOrSegmentEOF.ctrl" ->  NEW LINES HAVE been appended.
+ Case 3.2,2: Special handling:
+
+Stopping: (LogScanner::KEEP_LOOPING)
+------------------------------------
+ Stop each case above.
+
+Executing:
+----------
+ Logfile is renamed.
+ Config is renamed.

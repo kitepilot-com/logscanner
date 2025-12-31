@@ -14,6 +14,7 @@
 #include <queue>
 #include <string>
 #include <atomic>
+#include <boost/thread.hpp>
 #include <boost/interprocess/sync/named_semaphore.hpp>
 
 class ConveyorBelt

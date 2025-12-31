@@ -19,6 +19,12 @@ int JUNK_ADD_PARENTS_AND_LEVELS_TO_REPORTS; //FIXTHIS!!!
 
 LogManager::~LogManager()
 {
+	if(m_thisObj != nullptr)
+	{
+		LogManager *thisObj = m_thisObj;
+		m_thisObj = nullptr;
+		delete thisObj;
+	}
 }
 
 void LogManager::init()

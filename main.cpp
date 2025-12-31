@@ -50,6 +50,9 @@ void signalHandler(int signum, siginfo_t *info, void *context)
 		char buf[100];
 		int len = snprintf(buf, sizeof(buf), "Faulting address: 0x%lx\n", (long)info->si_addr);
 		write(STDERR_FILENO, buf, len);
+int JUNK_DELETE_THIS_MESSAGE;//FIXTHS!!!
+		const char msg3[] = "for ADDR in $(grep -v '^[[:digit:]]' logscanner/exec-log/logscanner-output.log|grep -E '\\(\\+'|sed -e 's/.*(+/+/g'|sed -e 's/).*//g');do addr2line -f -C -e logscanner/logscanner ${ADDR};done|less -S\n";
+		write(STDERR_FILENO, msg3, sizeof(msg2) - 1);
 
 		// Exit the program safely. _exit() is async-signal-safe.
 		_exit(EXIT_FAILURE);

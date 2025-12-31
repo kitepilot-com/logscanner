@@ -3,6 +3,7 @@
 # Created:     Jan-07-25                                                       #
 # Last update: Jan-07-25                                                       #
 ################################################################################
+#	g++ -g -fsanitize=address -Wall -c -o main.o main.cpp
 
 logscanner: main.o LogManager.o Workarea.o ConfContainer.o LumpContainer.o ConveyorBelt.o INotifyObj.o NotifyEvent.o LogScanner.o
 	g++ -g -Wall -o logscanner main.o LogManager.o Workarea.o ConfContainer.o LumpContainer.o ConveyorBelt.o INotifyObj.o NotifyEvent.o LogScanner.o -lboost_thread -lboost_chrono -lboost_regex -lmariadbcpp

@@ -34,7 +34,6 @@ class Workarea
 //		void                addMatchCount();
 	private:
 	ConfContainer               *m_logfileData;
-	mutable boost::mutex         m_regexpSyncMtx;
 	std::string                  m_procThreadID;
 	bool                        *m_regexpResults;
 	std::array<std::string, 4>   m_ipAddr;

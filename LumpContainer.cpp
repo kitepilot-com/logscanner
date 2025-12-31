@@ -197,7 +197,9 @@ bool LumpContainer::initReadLogThread()
 
 void LumpContainer::StartWaitForFirstLineThread(std::string logFilePath, std::filesystem::path ctrlFileName)
 {
+	m_allMonitorThreadsMutex.lock();
 	m_allMonitorThreads.push_back(std::make_shared<boost::thread>(&LumpContainer::waitForFirstLineThread, this, logFilePath, ctrlFileName));
+	m_allMonitorThreadsMutex.unlock();
 }
 
 void LumpContainer::stopReadLogThread()
@@ -246,7 +248,9 @@ void LumpContainer::feedLumpLogFile(std::string lumpComponent, std::atomic<std::
 	{
 		// First check that we are reading the same logfile we were...
 		// Start monitor for name change.
+		m_allMonitorThreadsMutex.lock();
 		m_allMonitorThreads.push_back(std::make_shared<boost::thread>(&LumpContainer::monitor4RenameThread, this, lumpComponent));
+		m_allMonitorThreadsMutex.unlock();
 
 		// Does ctrlFile file exist?
 		std::ifstream ctrlifs(ctrlFileName, std::ios::in);

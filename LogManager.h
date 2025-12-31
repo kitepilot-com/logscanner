@@ -33,7 +33,6 @@ class LogManager
 
 		static LogManager *m_thisObj;
 
-		mutable boost::mutex  m_linMutex;
 		mutable boost::mutex  m_evtMutex;
 		mutable boost::mutex  m_msgMutex;
 };

@@ -8,7 +8,7 @@ echo "less -S logscanner/exec-log/logscanner-output.log"
 
 EXEC_CMD=" "
 if [[ -z "$1" ]];then # {
-	EXEC_CMD="(cd logscanner/ && ./logscanner > exec-log/logscanner-output.log 2>&1) "
+	EXEC_CMD="(cd logscanner/ && valgrind --max-threads=4096 ./logscanner > exec-log/logscanner-output.log 2>&1) "
 else # } {
 	EXEC_CMD="(cd logscanner/ && gdb ./logscanner)"
 fi # }

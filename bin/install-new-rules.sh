@@ -58,7 +58,7 @@ source ${TEMP_PATH}/get_rules.cmd
 
 # And install it...
 #/usr/sbin/iptables-restore --noflush ${TEMP_PATH}/${FILE_NAME} > ${LOGS_PATH}/${FILE_NAME}.log 2>&1
-/usr/sbin/iptables-restore --counters ${TEMP_PATH}/${FILE_NAME} > ${IPTAB_LOG} 2>&1
+####    DELETE BEFORE EXEC    ####/usr/sbin/iptables-restore --counters ${TEMP_PATH}/${FILE_NAME} > ${IPTAB_LOG} 2>&1
 
 # Dump empty logfiles...
 if [[ $(/usr/bin/stat ${IPTAB_LOG}|/usr/bin/grep -E '^[[:space:]]{1,}Size:'|/usr/bin/awk '{print $2}') -eq 0 ]];then # {

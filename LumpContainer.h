@@ -61,6 +61,7 @@ class LumpContainer : public ConfContainer
 
 		// Save list of watched files so we can release them in bulk.
 		std::vector<std::shared_ptr<boost::thread>> m_allMonitorThreads;
+		mutable boost::mutex                        m_allMonitorThreadsMutex;
 
 		// This member stores the thread ID we need to kill this thread as part of a restart.
 //		std::map<std::string, boost::thread::native_handle_type>   m_logReadingThreadIdList;
