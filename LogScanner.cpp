@@ -303,7 +303,7 @@ int JUNK_RESTORE_SUMMARY_MESSAGE; //FIXTHIS!!!   There will be more opcodes...  
 			// The "if" below means that "we don't consistent or phisycal files".
 			if(m_confCount == 0)
 			{
-				LogManager::getInstance()->consoleMsg("*** FATAL *** No valid configuration files found.");
+				LogManager::getInstance()->consoleMsg(("*** FATAL *** No valid configuration files found.in " + confPath.string()).c_str());
 				m_state = LogScanner::CONFIG_ERR;
 			}
 		}

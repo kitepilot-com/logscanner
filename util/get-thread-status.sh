@@ -77,6 +77,16 @@ wait
 
 rm -f /tmp/junk-logscanner-show-one-thread-*.cmd f /tmp/junk-logscanner-show-all-threads-*.txt f /tmp/junk-logscanner-get-threads-result-*.txt
 
+if [[ -f logscanner/exec-log/logscanner-output.log ]];then # {
+	grep 'logscanner is exiting gracefully' logscanner/exec-log/logscanner-output.log
+
+	if [[ $(grep 'logscanner is exiting gracefully' logscanner/exec-log/logscanner-output.log|wc -l) -ne 1 ]];then # {
+		echo "***********************   Is 'logscanner is exiting gracefully' there?   ***********************"
+	fi # }
+else # } {
+	echo "Whre is logscanner/exec-log/logscanner-output.log  ?   :("
+fi # }
+
 echo "Results at:"
 ls -ld /tmp/junk-logscanner*
 #*END*#
